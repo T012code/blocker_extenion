@@ -1,0 +1,42 @@
+/* Ad slots on YouTube pages (home feed, search, watch page, Shorts). */
+#masthead-ad,
+#player-ads,
+#panels > ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-ads"],
+ytd-ad-slot-renderer,
+ytd-in-feed-ad-layout-renderer,
+ytd-banner-promo-renderer,
+ytd-statement-banner-renderer,
+ytd-promoted-sparkles-web-renderer,
+ytd-promoted-sparkles-text-search-renderer,
+ytd-promoted-video-renderer,
+ytd-display-ad-renderer,
+ytd-companion-slot-renderer,
+ytd-action-companion-ad-renderer,
+ytd-search-pyv-renderer,
+ytd-video-masthead-ad-v3-renderer,
+ytd-primetime-promo-renderer,
+ytd-brand-video-singleton-renderer,
+ytd-merch-shelf-renderer,
+ytd-rich-item-renderer:has(> #content > ytd-ad-slot-renderer),
+ytd-rich-section-renderer:has(ytd-statement-banner-renderer),
+ytd-reel-video-renderer:has(.ytd-ad-slot-renderer),
+ytm-promoted-sparkles-web-renderer,
+ytm-companion-ad-renderer,
+ad-slot-renderer,
+.ytd-player-legacy-desktop-watch-ads-renderer,
+.ytp-ad-overlay-container,
+.ytp-ad-overlay-slot,
+.ytp-ad-image-overlay,
+.ytp-suggested-action-badge,
+.ytp-featured-product,
+.video-ads.ytp-ad-module:empty,
+.ytp-ad-progress-list,
+tp-yt-paper-dialog:has(ytd-enforcement-message-view-model),
+ytd-enforcement-message-view-model {
+  display: none !important;
+}
+
+/* While an ad is still showing (before it gets skipped), keep it out of sight. */
+.html5-video-player.ad-showing video {
+  opacity: 0 !important;
+}

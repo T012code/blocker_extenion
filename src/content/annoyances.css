@@ -1,0 +1,64 @@
+/* Cookie consent banners from the most common consent platforms.
+   Turn off "Hide cookie banners" in settings if a site needs you to click one. */
+#onetrust-consent-sdk,
+#onetrust-banner-sdk,
+#CybotCookiebotDialog,
+#CybotCookiebotDialogBodyUnderlay,
+.qc-cmp2-container,
+#qc-cmp2-container,
+#usercentrics-root,
+#usercentrics-cmp-ui,
+.cc-window.cc-banner,
+.cc-window.cc-floating,
+#cookie-law-info-bar,
+.cli-modal-backdrop,
+#cookie-notice,
+.cookie-notice-container,
+#cmplz-cookiebanner-container,
+.cmplz-cookiebanner,
+#truste-consent-track,
+.truste_box_overlay,
+.truste_overlay,
+#didomi-host,
+#didomi-notice,
+.didomi-popup-backdrop,
+#iubenda-cs-banner,
+.iubenda-cs-container,
+#sp_message_container,
+[id^="sp_message_container_"],
+.fc-consent-root,
+#moove_gdpr_cookie_info_bar,
+#gdpr-cookie-message,
+.osano-cm-window,
+#termly-code-snippet-support,
+#hs-eu-cookie-confirmation,
+.klaro .cookie-notice,
+#BorlabsCookieBox,
+#cookiescript_injected,
+#ccc,
+#ccc-overlay {
+  display: none !important;
+}
+
+/* Many banners also lock page scrolling. Undo that only when one of them is present. */
+html:has(#onetrust-consent-sdk),
+body:has(#onetrust-consent-sdk),
+html:has(#CybotCookiebotDialog),
+body:has(#CybotCookiebotDialog),
+html:has(.qc-cmp2-container),
+body:has(.qc-cmp2-container),
+html:has(#didomi-host),
+body:has(#didomi-host),
+html:has(.fc-consent-root),
+body:has(.fc-consent-root),
+html:has([id^="sp_message_container"]),
+body:has([id^="sp_message_container"]) {
+  overflow: auto !important;
+  position: static !important;
+}
+body.didomi-popup-open,
+body.sp-message-open,
+html.sp-message-open,
+body.fc-consent-open {
+  overflow: auto !important;
+}
