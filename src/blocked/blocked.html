@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Site blocked · Layo's Advanced Blocker</title>
+  <link rel="icon" href="../../icons/icon-32.png">
+  <link rel="stylesheet" href="../shared/ui.css">
+  <link rel="stylesheet" href="blocked.css">
+</head>
+<body>
+  <main class="panel">
+    <svg class="mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M12 2l8 3v6c0 5-3.4 9.3-8 11-4.6-1.7-8-6-8-11V5z"/>
+      <path d="M12 8v4"/><path d="M12 16h.01"/>
+    </svg>
+    <h1>This site may be dangerous</h1>
+    <p class="host" id="host"></p>
+    <p>Layo's Advanced Blocker stopped this page because the site is on a list of places known for malware, scams, bundled adware or hidden cryptocurrency mining.</p>
+    <div class="actions">
+      <button class="btn primary" id="back" type="button">Go back</button>
+      <button class="btn" id="proceed" type="button">Open it anyway</button>
+    </div>
+    <p class="small" id="error" role="alert" hidden></p>
+  </main>
+  <script type="module" src="blocked.js"></script>
+</body>
+</html>

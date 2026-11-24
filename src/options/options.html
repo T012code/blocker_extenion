@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Settings · Layo's Advanced Blocker</title>
+  <link rel="icon" href="../../icons/icon-32.png">
+  <link rel="stylesheet" href="../shared/ui.css">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="side">
+      <div class="brand">
+        <img src="../../icons/icon-48.png" alt="" width="32" height="32">
+        <div>
+          <p class="brand-name">Layo's Advanced Blocker</p>
+          <p class="brand-version" id="version"></p>
+        </div>
+      </div>
+      <nav aria-label="Settings sections">
+        <a href="#blocking">Blocking</a>
+        <a href="#youtube">YouTube</a>
+        <a href="#privacy">Privacy</a>
+        <a href="#security">Security</a>
+        <a href="#allowlist">Trusted sites</a>
+        <a href="#hidden">Hidden elements</a>
+        <a href="#backup">Backup &amp; reset</a>
+        <a href="#about">About</a>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <section class="master card">
+        <label class="row">
+          <span class="row-text">
+            <span class="row-title">Protection</span>
+            <span class="row-hint" id="master-hint">Blocking is on.</span>
+          </span>
+          <input type="checkbox" class="switch" id="enabled" role="switch">
+        </label>
+      </section>
+
+      <section id="blocking">
+        <h2>Blocking</h2>
+        <div class="card">
+          <label class="row">
+            <span class="row-text">
+              <span class="row-title">Block ads</span>
+              <span class="row-hint">Stops requests to <span data-count="ads"></span> ad servers.</span>
+            </span>
+            <input type="checkbox" class="switch" data-setting="rulesets.ads" role="switch">
+          </label>
+          <label class="row">
+            <span class="row-text">
+              <span class="row-title">Block trackers</span>
+              <span class="row-hint">Stops analytics and tracking services (<span data-count="trackers"></span> domains) from following you across sites.</span>
+            </span>
+            <input type="checkbox" class="switch" data-setting="rulesets.trackers" role="switch">
+          </label>
+          <label class="row">
+            <span class="row-text">
+              <span class="row-title">Hide leftover ad spaces</span>
+              <span class="row-hint">Removes empty boxes and ad containers that stay behind after an ad is blocked.</span>
+            </span>
+            <input type="checkbox" class="switch" data-setting="cosmetic" role="switch">
+          </label>
+          <label class="row">
+            <span class="row-text">
+              <span class="row-title">Close pop-up ads</span>
+              <span class="row-hint">Closes new tabs and windows that pages open to known ad networks.</span>
+            </span>
+            <input type="checkbox" class="switch" data-setting="popups" role="switch">
+          </label>
+          <label class="row">
+            <span class="row-text">
+              <span class="row-title">Block social media widgets</span>
+              <span class="row-hint">Like buttons, share bars and embedded feeds from Facebook, X, LinkedIn and others. May break "Sign in with…" buttons on some sites.</span>
+            </span>
+            <input type="checkbox" class="switch" data-setting="rulesets.social" role="switch">
+          </label>
+          <label class="row">
+            <span class="row-text">
+              <span class="row-title">Hide cookie banners</span>
+              <span class="row-hint">Hides consent pop-ups from the common cookie banner providers. Nothing gets accepted for you.</span>
+            </span>
+            <input type="checkbox" class="switch" data-setting="annoyances" role="switch">
+          </label>
+        </div>
+      </section>
+
+      <section id="youtube">
+        <h2>YouTube</h2>
+        <div class="card">
+          <label class="row">
+            <span class="row-text">
+              <span class="row-title">Block YouTube ads</span>
+              <span class="row-hint">Removes video ads before they load, skips any that slip through, and hides ads in the feed, search results and sidebar.</span>
+            </span>
+            <input type="checkbox" class="switch" data-setting="youtube" role="switch">
+          </label>
+        </div>
+      </section>
+
+      <section id="privacy">
+        <h2>Privacy</h2>
+        <div class="card">
+          <label class="row">
+            <span class="row-text">
+              <span class="row-title">Remove tracking codes from links</span>
+              <span class="row-hint">Strips <code>utm_source</code>, <code>fbclid</code>, <code>gclid</code> and <span data-count="params"></span> other tracking parameters from addresses you open.</span>
+            </span>
+            <input type="checkbox" class="switch" data-setting="rulesets.strip_params" role="switch">
+          </label>
+          <label class="row">
+            <span class="row-text">
+              <span class="row-title">Ask sites not to sell or share my data</span>
+              <span class="row-hint">Sends the Global Privacy Control and Do Not Track signals with every request.</span>
+            </span>
+            <input type="checkbox" class="switch" data-setting="rulesets.privacy_signals" role="switch">
+          </label>
+          <label class="row">
+            <span class="row-text">
+              <span class="row-title">Block third-party pings and beacons</span>
+              <span class="row-hint">Stops background "ping" requests that report your clicks and visits to other companies.</span>
+            </span>
+            <input type="checkbox" class="switch" data-setting="rulesets.block_pings" role="switch">
+          </label>
+          <label class="row">
+            <span class="row-text">
+              <span class="row-title">Disable hyperlink auditing</span>
+              <span class="row-hint">Turns off the browser feature that lets links report when you click them.</span>
+            </span>
+            <input type="checkbox" class="switch" data-setting="privacy.hyperlinkAuditing" role="switch">
+          </label>
+          <label class="row">
+            <span class="row-text">
+              <span class="row-title">Prevent WebRTC IP leaks</span>
+              <span class="row-hint">Stops websites from seeing your real IP address through WebRTC, which matters most when you use a VPN or proxy.</span>
+            </span>
+            <input type="checkbox" class="switch" data-setting="privacy.webrtc" role="switch">
+          </label>
+          <label class="row">
+            <span class="row-text">
+              <span class="row-title">Hide where you came from</span>
+              <span class="row-hint">Removes the Referer header from requests to other sites. A few sites use it to protect images and may stop showing them.</span>
+            </span>
+            <input type="checkbox" class="switch" data-setting="rulesets.hide_referrer" role="switch">
+          </label>
+          <label class="row">
+            <span class="row-text">
+              <span class="row-title">Block third-party cookies</span>
+              <span class="row-hint">Uses the browser's own setting. Some logins and embedded content may stop working.</span>
+            </span>
+            <input type="checkbox" class="switch" data-setting="privacy.thirdPartyCookies" role="switch">
+          </label>
+          <label class="row">
+            <span class="row-text">
+              <span class="row-title">Turn off network prediction</span>
+              <span class="row-hint">Stops the browser from contacting sites it guesses you might visit next. Pages may load slightly slower.</span>
+            </span>
+            <input type="checkbox" class="switch" data-setting="privacy.networkPrediction" role="switch">
+          </label>
+        </div>
+        <p class="note" id="privacy-note" hidden></p>
+      </section>
+
+      <section id="security">
+        <h2>Security</h2>
+        <div class="card">
+          <label class="row">
+            <span class="row-text">
+              <span class="row-title">Warn me about dangerous sites</span>
+              <span class="row-hint">Shows a warning before opening <span data-count="security"></span> sites known for malware, scams or bundled adware, and blocks cryptocurrency miners.</span>
+            </span>
+            <input type="checkbox" class="switch" data-setting="rulesets.security" role="switch">
+          </label>
+          <label class="row">
+            <span class="row-text">
+              <span class="row-title">Always use HTTPS</span>
+              <span class="row-hint">Opens the secure version of sites you visit over plain HTTP. Local network addresses are left alone. Sites with no HTTPS will fail to load.</span>
+            </span>
+            <input type="checkbox" class="switch" data-setting="rulesets.https_upgrade" role="switch">
+          </label>
+        </div>
+      </section>
+
+      <section id="allowlist">
+        <h2>Trusted sites</h2>
+        <p class="lead">Nothing is blocked on these sites or their subdomains.</p>
+        <form class="add" id="allow-form" novalidate>
+          <label class="sr-only" for="allow-input">Site address</label>
+          <input id="allow-input" type="text" placeholder="example.com" autocomplete="off" spellcheck="false">
+          <button class="btn primary" type="submit">Add site</button>
+        </form>
+        <p class="field-error" id="allow-error" role="alert" hidden></p>
+        <ul class="list card" id="allow-list"></ul>
+      </section>
+
+      <section id="hidden">
+        <h2>Hidden elements</h2>
+        <p class="lead">Things you hid with "Hide an element". Right-click any page and choose it from the menu, or use the button in the toolbar pop-up.</p>
+        <ul class="list card" id="hidden-list"></ul>
+      </section>
+
+      <section id="backup">
+        <h2>Backup &amp; reset</h2>
+        <div class="card buttons">
+          <button class="btn" id="export" type="button">Export settings</button>
+          <button class="btn" id="import" type="button">Import settings</button>
+          <input type="file" id="import-file" accept="application/json,.json" hidden>
+          <button class="btn danger" id="reset" type="button">Reset everything</button>
+        </div>
+      </section>
+
+      <section id="about">
+        <h2>About</h2>
+        <div class="card prose">
+          <p>Blocking happens inside the browser using its built-in request filtering, so pages load faster and nothing you browse is sent anywhere. This extension has no servers and collects no data.</p>
+          <p>Block lists come from <a href="https://easylist.to/" target="_blank" rel="noopener">EasyList and EasyPrivacy</a>, <a href="https://github.com/AdguardTeam/AdguardFilters" target="_blank" rel="noopener">AdGuard filters</a>, <a href="https://github.com/uBlockOrigin/uAssets" target="_blank" rel="noopener">uBlock Origin's badware list</a> and the <a href="https://github.com/hoshsadiq/adblock-nocoin-list" target="_blank" rel="noopener">NoCoin list</a>. Thanks to everyone who maintains them.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+  <script type="module" src="options.js"></script>
+</body>
+</html>
