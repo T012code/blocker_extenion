@@ -1,0 +1,16 @@
+# Extra domains for the security list (cryptominers, known malware hosts).
+coinhive.com
+coin-hive.com
+authedmine.com
+crypto-loot.com
+cryptoloot.pro
+coinimp.com
+webminepool.com
+jsecoin.com
+minero.cc
+ppoi.org
+monerominer.rocks
+webmine.cz
+minr.pw
+cryptonoter.com
+coinpot.co

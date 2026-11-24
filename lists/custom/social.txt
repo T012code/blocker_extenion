@@ -1,0 +1,18 @@
+# Social media widgets (like buttons, share bars, embedded feeds) loaded on other sites.
+# Off by default because it can break "Sign in with ..." buttons and embedded posts.
+connect.facebook.net
+platform.twitter.com
+platform.x.com
+syndication.twitter.com
+platform.linkedin.com
+assets.pinterest.com
+widgets.pinterest.com
+platform.instagram.com
+addthis.com
+addthiscdn.com
+addtoany.com
+sharethis.com
+shareaholic.com
+po.st
+disqus.com
+disquscdn.com

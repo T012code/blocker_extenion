@@ -1,0 +1,28 @@
+[
+ {
+  "id": 1,
+  "priority": 1,
+  "action": {
+   "type": "upgradeScheme"
+  },
+  "condition": {
+   "urlFilter": "|http://",
+   "resourceTypes": [
+    "main_frame"
+   ]
+  }
+ },
+ {
+  "id": 2,
+  "priority": 2,
+  "action": {
+   "type": "allow"
+  },
+  "condition": {
+   "regexFilter": "^http://(localhost|127\\.|10\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[01])\\.|\\[|[^/:]+\\.(local|lan|home|internal|test)[/:]|[^/:.]+[/:])",
+   "resourceTypes": [
+    "main_frame"
+   ]
+  }
+ }
+]

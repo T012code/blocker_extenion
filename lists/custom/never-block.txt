@@ -1,0 +1,21 @@
+# Domains that must never end up on a block list by accident, even if an upstream list adds them.
+google.com
+youtube.com
+googlevideo.com
+ytimg.com
+gstatic.com
+googleapis.com
+microsoft.com
+microsoftedge.com
+bing.com
+apple.com
+github.com
+githubusercontent.com
+wikipedia.org
+cloudflare.com
+amazon.com
+facebook.com
+instagram.com
+x.com
+twitter.com
+linkedin.com
