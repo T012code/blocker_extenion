@@ -10,6 +10,7 @@ pub mod filename;
 pub mod http;
 pub mod limiter;
 pub mod model;
+pub mod runner;
 pub mod store;
 mod transfer;
 
@@ -17,3 +18,4 @@ pub use category::Category;
 pub use engine::{Engine, EngineConfig, MAX_CONNECTIONS, SECTION_PRESETS};
 pub use error::{Error, Result};
 pub use model::*;
+pub use runner::{Job, Reporter, Runner};

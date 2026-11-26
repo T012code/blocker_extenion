@@ -4,7 +4,7 @@
 
 A free download manager for Windows. It speeds up downloads by fetching each file in many sections at once, resumes broken downloads, catches downloads from your browser, and grabs videos from web pages.
 
-> **Status:** in development. The download engine, the browser extension and the browser bridge are done and tested. The desktop app, video grabber, queues and installer come next.
+> **Status:** in development. Done and tested: the download engine, the browser extension, the browser bridge, the video download button and torrents. Next: the desktop app, queues and scheduler, and the installer.
 
 ## How the multi-section download works
 
@@ -58,6 +58,23 @@ Any download can be paused and continued. Most servers allow fetching part of a 
 
 Until the desktop app is ready, the browser extension's toolbar pop-up lists your downloads with live progress, speed and time left, and has **Pause** and **Continue** buttons.
 
+## Download button on videos
+
+Point at a video on any web page and a **Download** button appears in its corner. Click it for a menu of what can be saved:
+
+- **On this page:** the video file the page plays, and the qualities of streaming players (HLS), e.g. *720p stream*, *360p stream*, read straight from the stream's playlist.
+- **From the site:** for sites like YouTube, whose players stream in small pieces, the download manager asks [yt-dlp](https://github.com/yt-dlp/yt-dlp) for the formats: one entry per picture size (1080p60 MP4, 720p MP4…) plus *Audio only*, with sizes.
+
+Pick one and it downloads in the app, named after the page's title. Streams are fetched several pieces at a time, and separate picture and sound tracks are joined with ffmpeg. Video downloads pause and continue like any other. Protected (DRM) videos, such as on paid streaming services, show a message instead: they can't be downloaded.
+
+yt-dlp and ffmpeg ship with the Windows installer. For development, put them on your PATH, or set `LDM_YTDLP` and `LDM_FFMPEG`.
+
+## Torrents
+
+Magnet links clicked in the browser, `magnet:` links added by hand, and `.torrent` files (including ones you download, which open automatically) are downloaded with the built-in BitTorrent engine ([librqbit](https://github.com/ikatson/rqbit)). They're ordinary items in the download list: they show progress and speed, and pause and continue, keeping every verified piece. A torrent with several files gets its own folder.
+
+When a torrent finishes, it keeps sharing (*Sharing* in the list) until you've uploaded as much as you downloaded (a ratio of 1.0), then stops. **Stop sharing** ends it early; the download stays complete. Peers are found through trackers, the DHT and the local network, and the router's port is opened with UPnP when it allows.
+
 ## Taking over browser downloads
 
 The browser extension (in [`extension/`](extension/)) watches downloads in Chrome, Edge, Opera, Brave, Vivaldi and Firefox. When you download a file of a type on its list (archives, programs, video, audio, documents), it cancels the browser's download and hands the link to the download manager, including the cookies, referrer and user agent, so downloads behind a login keep working. It leaves alone:
@@ -93,7 +110,10 @@ layos-download-manager/
   crates/service/        Turns browser requests into downloads (shared with the app);
                          ldm-headless runs it without a window, for development
   crates/native-host/    ldm-native-host: the browser bridge, and --register/--unregister
-  crates/testkit/        Test web server used by the Rust tests
+  crates/torrent/        Torrents (librqbit), as a runner for the engine
+  crates/media/          Video downloads (yt-dlp + ffmpeg): format menus and a runner
+  crates/testkit/        Test web servers used by the Rust tests
+  vendor/                A patched librqbit part (IPv4 fallback); see its NOTICE.md
   extension/             Browser extension (Chrome-family and Firefox builds)
   brand/                 Colours, fonts and Layó's logo from layothedeveloper.com
   app-icon.png           App icon (drawn by extension/tools/make-icons.py)
@@ -109,7 +129,7 @@ You need [Rust](https://rustup.rs/) 1.85 or newer, and Node.js 22 or newer for t
 cargo test --workspace
 ```
 
-Runs the engine, bridge and pipe tests. The engine tests use a small web server that can go slow, drop connections, refuse byte ranges, hide the file size and refuse links. They check every download is byte-for-byte correct, including with 8, 16, 32 and 64 parallel sections. The bridge tests run the real `ldm-native-host` program the way a browser does.
+Runs the engine, torrent, video, bridge and pipe tests. The torrent tests share real files between two BitTorrent sessions on your computer. The video tests make HLS streams with ffmpeg and download them with yt-dlp; they're skipped if those aren't installed. The engine tests use a small web server that can go slow, drop connections, refuse byte ranges, hide the file size and refuse links. They check every download is byte-for-byte correct, including with 8, 16, 32 and 64 parallel sections. The bridge tests run the real `ldm-native-host` program the way a browser does.
 
 ```bash
 cd extension && npm test && npm run test:e2e

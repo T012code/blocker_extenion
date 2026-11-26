@@ -257,3 +257,115 @@ async fn respond_status(sock: &mut TcpStream, status: &str) -> std::io::Result<(
     let resp = format!("HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
     sock.write_all(resp.as_bytes()).await
 }
+
+/// Serves the files in a folder over HTTP, with byte ranges. For media tests.
+pub struct StaticServer {
+    pub base: String,
+}
+
+impl StaticServer {
+    pub async fn start(dir: std::path::PathBuf) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            loop {
+                let Ok((sock, _)) = listener.accept().await else {
+                    break;
+                };
+                let dir = dir.clone();
+                tokio::spawn(async move {
+                    let _ = serve_file(sock, &dir).await;
+                });
+            }
+        });
+        Self {
+            base: format!("http://{addr}"),
+        }
+    }
+
+    pub fn url(&self, path: &str) -> String {
+        format!("{}/{}", self.base, path.trim_start_matches('/'))
+    }
+}
+
+fn content_type(path: &str) -> &'static str {
+    match path.rsplit('.').next().unwrap_or("") {
+        "m3u8" => "application/vnd.apple.mpegurl",
+        "mpd" => "application/dash+xml",
+        "ts" => "video/mp2t",
+        "mp4" | "m4s" => "video/mp4",
+        "webm" => "video/webm",
+        "html" => "text/html; charset=utf-8",
+        "js" => "text/javascript",
+        _ => "application/octet-stream",
+    }
+}
+
+async fn serve_file(mut sock: TcpStream, dir: &std::path::Path) -> std::io::Result<()> {
+    let mut buf = Vec::new();
+    let mut tmp = [0u8; 4096];
+    while !buf.windows(4).any(|w| w == b"\r\n\r\n") {
+        let n = sock.read(&mut tmp).await?;
+        if n == 0 {
+            return Ok(());
+        }
+        buf.extend_from_slice(&tmp[..n]);
+    }
+    let head = String::from_utf8_lossy(&buf).to_string();
+    let path = head
+        .split_whitespace()
+        .nth(1)
+        .unwrap_or("/")
+        .split('?')
+        .next()
+        .unwrap_or("/")
+        .to_string();
+    let range = head.split("\r\n").find_map(|l| {
+        l.split_once(':')
+            .filter(|(k, _)| k.eq_ignore_ascii_case("range"))
+            .map(|(_, v)| v.trim().to_string())
+    });
+    let rel = path.trim_start_matches('/');
+    if rel.contains("..") {
+        return sock
+            .write_all(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            .await;
+    }
+    let Ok(body) = std::fs::read(dir.join(rel)) else {
+        return sock
+            .write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            .await;
+    };
+    let total = body.len();
+    let (status, from, to) = match range
+        .as_deref()
+        .and_then(|r| r.strip_prefix("bytes="))
+        .and_then(|r| r.split_once('-'))
+    {
+        Some((a, b)) => {
+            let a: usize = a.parse().unwrap_or(0);
+            let b: usize = if b.is_empty() {
+                total.saturating_sub(1)
+            } else {
+                b.parse::<usize>().unwrap_or(0).min(total.saturating_sub(1))
+            };
+            ("206 Partial Content", a, b + 1)
+        }
+        None => ("200 OK", 0, total),
+    };
+    let mut head = format!(
+        "HTTP/1.1 {status}\r\nConnection: close\r\nAccept-Ranges: bytes\r\nContent-Type: {}\r\nContent-Length: {}\r\n",
+        content_type(rel),
+        to - from
+    );
+    if status.starts_with("206") {
+        head.push_str(&format!(
+            "Content-Range: bytes {from}-{}/{total}\r\n",
+            to - 1
+        ));
+    }
+    head.push_str("\r\n");
+    sock.write_all(head.as_bytes()).await?;
+    sock.write_all(&body[from..to]).await?;
+    sock.flush().await
+}

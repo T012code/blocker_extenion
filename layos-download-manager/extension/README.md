@@ -23,6 +23,10 @@ If the app can't be reached when a download arrives, the extension gives the dow
 
 **How it hooks in.** In Chrome-family browsers it uses `downloads.onDeterminingFilename`, which runs before the browser shows a "Save as" window. If that step is skipped (some enterprise policies and automation tools do this), a backup on `downloads.onCreated` takes the download over within a second. Firefox uses `downloads.onCreated`.
 
+**Download button on videos.** Pointing at a video shows a **Download** button in its corner, with a menu of what can be saved: the file the page plays, the qualities of streaming players (read from their HLS playlists), and, through the app's yt-dlp, the formats of sites like YouTube, including audio only. Protected (DRM) videos show a message instead. It can be switched off in settings.
+
+**Magnet links.** Clicking a `magnet:` link opens it as a torrent in Layó's Download Manager (hold the bypass key to skip). If the app can't take it, the link goes to your usual torrent app.
+
 **Right-click menu**
 - **Download with Layó's DM** on a link
 - **Download this video/audio with Layó's DM** on a video or audio player
@@ -89,6 +93,11 @@ End-to-end test in a real Chromium. Build the Rust programs first: run `cargo bu
 5. Taken-over files never reach the browser's download folder
 6. The backup hook takes a download over when automation controls the browser's downloads
 7. **Pause** in the pop-up stops a download and keeps its progress, and **Continue** finishes it from where it stopped
+8. Pointing at a video shows the **Download** button; its menu lists the video file and the site's formats, and picking one saves it named after the page
+9. A page streaming HLS lists its qualities (360p, 180p); picking one downloads it through yt-dlp
+10. Clicking a magnet link opens it as a torrent in the app
+
+Parts 8 and 9 need ffmpeg, and part 9 and the "From the site" list need yt-dlp: set `LDM_YTDLP` to its path.
 
 ## Files
 

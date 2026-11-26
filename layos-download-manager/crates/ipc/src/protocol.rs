@@ -40,6 +40,37 @@ pub struct BrowserDownload {
     /// Link text, used as a description.
     #[serde(default)]
     pub description: Option<String>,
+    /// Set when this is a video/audio format picked from the video button.
+    #[serde(default)]
+    pub media: Option<MediaPick>,
+}
+
+/// A format picked in the video button's menu.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaPick {
+    /// The page or stream playlist the format came from.
+    pub page_url: String,
+    /// The format selector from [`MediaFormatChoice::format`]; `None` = best.
+    #[serde(default)]
+    pub format: Option<String>,
+    #[serde(default)]
+    pub label: Option<String>,
+    #[serde(default)]
+    pub title: Option<String>,
+}
+
+/// One entry of the video button's menu.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaFormatChoice {
+    pub format: String,
+    pub label: String,
+    /// "video" or "audio".
+    pub kind: String,
+    pub ext: String,
+    pub height: Option<u32>,
+    pub size: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -65,6 +96,9 @@ pub enum Request {
     Pause { id: i64 },
     /// Continue a paused, failed or waiting download.
     Resume { id: i64 },
+    /// Which formats can be downloaded from this page or stream? `item.url` is the page
+    /// (or playlist) address, with the browser's cookies.
+    MediaFormats { item: Box<BrowserDownload> },
 }
 
 impl Request {
@@ -74,7 +108,7 @@ impl Request {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Response {
     #[serde(rename_all = "camelCase")]
@@ -88,6 +122,14 @@ pub enum Response {
         ids: Vec<i64>,
     },
     Ok,
+    #[serde(rename_all = "camelCase")]
+    MediaFormats {
+        title: String,
+        duration: Option<f64>,
+        thumbnail: Option<String>,
+        is_live: bool,
+        choices: Vec<MediaFormatChoice>,
+    },
     #[serde(rename_all = "camelCase")]
     Downloads {
         app_running: bool,
@@ -116,6 +158,9 @@ pub struct DownloadSummary {
     /// Sections (connections) configured for it.
     pub connections: u8,
     pub error: Option<String>,
+    /// "file", "video" or "torrent".
+    #[serde(default)]
+    pub kind: String,
 }
 
 impl Response {

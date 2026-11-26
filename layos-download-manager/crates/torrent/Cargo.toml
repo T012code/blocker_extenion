@@ -1,0 +1,19 @@
+[package]
+name = "ldm-torrent"
+description = "BitTorrent downloads for Layó's Download Manager"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ldm-engine = { path = "../engine" }
+librqbit = "9.1"
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+anyhow = "1"
+bytes = "1"
+futures-util.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

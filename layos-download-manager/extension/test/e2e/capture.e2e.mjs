@@ -44,6 +44,32 @@ const files = {
   '/files/slow.zip': bytes(2 * 1024 * 1024, 4),
   '/files/paced.iso': bytes(12 * 1024 * 1024, 5),
 };
+// Real video for the Download button: an MP4 and a 2-quality HLS stream made by ffmpeg.
+const mediaDir = join(work, 'media');
+let haveMedia = false;
+try {
+  mkdirSync(mediaDir, { recursive: true });
+  const ff = (args) => execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args], { cwd: mediaDir });
+  ff(['-f', 'lavfi', '-i', 'testsrc2=duration=6:size=640x360:rate=25', '-f', 'lavfi', '-i', 'sine=duration=6',
+    '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac', '-movflags', '+faststart', '-shortest', 'clip.mp4']);
+  ff(['-f', 'lavfi', '-i', 'testsrc2=duration=8:size=640x360:rate=25', '-f', 'lavfi', '-i', 'sine=duration=8',
+    '-filter_complex', '[0:v]split=2[a][b];[b]scale=320:180[b2]', '-map', '[a]', '-map', '[b2]', '-map', '1:a', '-map', '1:a',
+    '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac', '-f', 'hls', '-hls_time', '2', '-hls_playlist_type', 'vod',
+    '-var_stream_map', 'v:0,a:0 v:1,a:1', '-master_pl_name', 'master.m3u8', '-hls_segment_filename', 'v%v_%03d.ts', 'v%v.m3u8']);
+  haveMedia = true;
+} catch (e) {
+  console.log(`# skipping video tests: ffmpeg not available (${e.message.split('\n')[0]})`);
+}
+const MEDIA_TYPES = { mp4: 'video/mp4', m3u8: 'application/vnd.apple.mpegurl', ts: 'video/mp2t' };
+const VIDEO_PAGE = `<!doctype html><title>Clip of the day</title><body style="margin:0;background:#111">
+<video id="v" src="/media/clip.mp4" muted autoplay loop playsinline width="640" height="360"></video></body>`;
+// Like a page using hls.js: the player fetches the playlist itself; the <video> has no file.
+const HLS_PAGE = `<!doctype html><title>Live show</title><body style="margin:0;background:#111">
+<video id="v" width="640" height="360" poster="data:image/gif;base64,R0lGODlhAQABAAAAACw="></video>
+<script>fetch('/media/master.m3u8').then((r) => r.text());</script></body>`;
+const MAGNET_PAGE = `<!doctype html><title>Torrents</title>
+<a id="m" href="magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&dn=Open+Movie+1080p">Open Movie 1080p</a>`;
+
 // Responses for these trickle out so there's time to pause them.
 const PACED = new Set(['/files/paced.iso']);
 let rangeRequests = 0;
@@ -69,6 +95,30 @@ const PAGE = `<!doctype html><title>Files</title>
 </script>`;
 
 const site = createServer(async (req, res) => {
+  const pages = { '/video.html': VIDEO_PAGE, '/hls.html': HLS_PAGE, '/magnet.html': MAGNET_PAGE };
+  if (pages[req.url]) {
+    res.setHeader('content-type', 'text/html');
+    res.end(pages[req.url]);
+    return;
+  }
+  if (req.url.startsWith('/media/')) {
+    const file = join(mediaDir, req.url.slice(7).split('?')[0]);
+    if (!file.startsWith(mediaDir) || !existsSync(file)) { res.statusCode = 404; res.end(); return; }
+    const body = readFileSync(file);
+    res.setHeader('content-type', MEDIA_TYPES[file.split('.').pop()] ?? 'application/octet-stream');
+    res.setHeader('accept-ranges', 'bytes');
+    const r = /bytes=(\d+)-(\d*)/.exec(req.headers.range ?? '');
+    if (r) {
+      const a = Number(r[1]);
+      const b = r[2] ? Math.min(Number(r[2]), body.length - 1) : body.length - 1;
+      res.statusCode = 206;
+      res.setHeader('content-range', `bytes ${a}-${b}/${body.length}`);
+      res.end(body.subarray(a, b + 1));
+    } else {
+      res.end(body);
+    }
+    return;
+  }
   if (req.url === '/' || req.url === '/?auto') {
     res.setHeader('content-type', 'text/html');
     res.setHeader('set-cookie', 'session=e2e; Path=/');
@@ -214,6 +264,68 @@ try {
   assert.ok(rangeRequests > before, 'continuing asks only for the missing parts');
   await popup.locator('.dl.completed', { hasText: 'paced.iso' }).waitFor({ timeout: 5_000 });
   console.log('ok - Continue finishes the download from where it stopped, byte-for-byte correct');
+
+  // ---- Part 4: the Download button on videos, and magnet links.
+  if (haveMedia) {
+    const vp = await managed.newPage();
+    await vp.setViewportSize({ width: 900, height: 560 });
+    await vp.goto(`${base}/video.html`);
+    await vp.waitForFunction(() => document.getElementById('v').readyState >= 2);
+    await vp.mouse.move(320, 180);
+    const dl = vp.locator('ldm-video-download').getByRole('button', { name: 'Download' });
+    await dl.waitFor({ timeout: 10_000 });
+    console.log('ok - pointing at a video shows the Download button');
+    await dl.click();
+    const menuItems = vp.locator('ldm-video-download .item');
+    await vp.locator('ldm-video-download .item', { hasText: 'Video file MP4' }).waitFor({ timeout: 10_000 });
+    if (process.env.LDM_YTDLP) {
+      await vp.locator('ldm-video-download .group', { hasText: 'From the site' }).waitFor({ timeout: 60_000 });
+    }
+    if (shots) await vp.screenshot({ path: join(shots, 'video-button-menu.png') });
+    if (process.env.LDM_YTDLP) {
+      await vp.locator('ldm-video-download .item', { hasText: 'Video MP4' }).waitFor({ timeout: 5_000 });
+      assert.equal(await vp.locator('ldm-video-download .item', { hasText: 'Audio only' }).count(), 0, 'a plain video file is not audio');
+    }
+    console.log(`ok - the menu lists: ${(await menuItems.allTextContents()).join(' | ')}`);
+    await vp.locator('ldm-video-download .item', { hasText: 'Video file MP4' }).click();
+    await vp.locator('ldm-video-download .note.ok').waitFor({ timeout: 15_000 });
+    const clip = readFileSync(join(mediaDir, 'clip.mp4'));
+    assert.ok(await waitFor(saved('Video/Clip of the day.mp4'), clip), 'the video file should be saved, named after the page');
+    console.log('ok - picking "Video file MP4" saves the video, named after the page title');
+
+    if (process.env.LDM_YTDLP) {
+      const hp = await managed.newPage();
+      await hp.setViewportSize({ width: 900, height: 560 });
+      await hp.goto(`${base}/hls.html`);
+      await sleep(1500);
+      await hp.mouse.move(320, 180);
+      await hp.locator('ldm-video-download').getByRole('button', { name: 'Download' }).click();
+      const q180 = hp.locator('ldm-video-download .item', { hasText: '180p stream' });
+      await q180.waitFor({ timeout: 10_000 });
+      assert.ok(await hp.locator('ldm-video-download .item', { hasText: '360p stream' }).count() > 0);
+      if (shots) await hp.screenshot({ path: join(shots, 'video-button-hls.png') });
+      console.log(`ok - a streaming player's qualities are listed: ${(await hp.locator('ldm-video-download .item').allTextContents()).join(' | ')}`);
+      const before = new Set(readdirSync(saved('Video')));
+      await q180.click();
+      await hp.locator('ldm-video-download .note.ok').waitFor({ timeout: 15_000 });
+      let got;
+      for (const end = Date.now() + 90_000; Date.now() < end && !got; await sleep(250)) {
+        got = readdirSync(saved('Video')).find((f) => !before.has(f) && /\.(mp4|mkv)$/.test(f));
+      }
+      assert.ok(got, `the 180p stream should be saved; Video folder: ${readdirSync(saved('Video'))}`);
+      assert.equal(got, 'Live show.mp4', 'streams are named after the page title');
+      console.log(`ok - picking "180p stream" downloads the stream through yt-dlp as ${got}`);
+    }
+  }
+
+  const mp = await managed.newPage();
+  await mp.goto(`${base}/magnet.html`);
+  await mp.click('#m');
+  const pop2 = await managed.newPage();
+  await pop2.goto(`chrome-extension://${EXTENSION_ID}/popup/popup.html`);
+  await pop2.locator('.dl', { hasText: 'Open Movie 1080p' }).locator('.badge', { hasText: 'Torrent' }).waitFor({ timeout: 15_000 });
+  if (shots) await pop2.screenshot({ path: join(shots, 'popup-torrent.png') });
+  console.log('ok - clicking a magnet link opens it as a torrent in the download manager');
 } catch (e) {
   failed = true;
   console.error('FAILED:', e);

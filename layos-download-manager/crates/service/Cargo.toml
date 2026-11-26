@@ -12,5 +12,7 @@ path = "src/main.rs"
 [dependencies]
 ldm-engine = { path = "../engine" }
 ldm-ipc = { path = "../ipc" }
+ldm-media = { path = "../media" }
+ldm-torrent = { path = "../torrent" }
 tokio.workspace = true
 tracing.workspace = true

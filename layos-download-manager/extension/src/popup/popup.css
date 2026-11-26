@@ -16,6 +16,7 @@ h2 { font-size: 13px; margin-bottom: 8px; }
 .dl .bar span { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width 400ms ease-out; }
 .dl.paused .bar span, .dl.failed .bar span, .dl.needsRefresh .bar span { background: var(--ink-muted); }
 .dl.completed .bar span { background: var(--success); }
+.dl.seeding .bar span { background: var(--pop); }
 .dl.unknown .bar span { width: 30% !important; background: var(--pop); animation: slide 1.2s ease-in-out infinite alternate; }
 @keyframes slide { from { transform: translateX(-10%); } to { transform: translateX(240%); } }
 @media (prefers-reduced-motion: reduce) { .dl.unknown .bar span { animation: none; } }

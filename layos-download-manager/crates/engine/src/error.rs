@@ -28,6 +28,9 @@ pub enum Error {
     AlreadyRunning,
     #[error("cancelled")]
     Cancelled,
+    /// From a runner (torrent, media tool).
+    #[error("{0}")]
+    Other(String),
 }
 
 impl Error {

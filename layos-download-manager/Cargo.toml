@@ -26,3 +26,7 @@ tracing = "0.1"
 lto = true
 codegen-units = 1
 strip = true
+
+# Torrents on computers without IPv6: see vendor/librqbit-tracker-comms/NOTICE.md.
+[patch.crates-io]
+librqbit-tracker-comms = { path = "vendor/librqbit-tracker-comms" }

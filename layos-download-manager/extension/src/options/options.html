@@ -53,6 +53,24 @@
       </section>
 
       <section class="card">
+        <h2>Videos and torrents</h2>
+        <label class="row">
+          <div>
+            <div>Show the Download button on videos</div>
+            <div class="muted">Point at a video to see a Download button in its corner. It lists the qualities you can save, including audio only. Protected (DRM) videos can't be downloaded.</div>
+          </div>
+          <span class="switch"><input type="checkbox" name="videoButton"><span></span></span>
+        </label>
+        <label class="row">
+          <div>
+            <div>Open magnet links in Layó's Download Manager</div>
+            <div class="muted">Torrents download with pause and continue, then share until you've uploaded as much as you downloaded. Downloaded .torrent files open automatically.</div>
+          </div>
+          <span class="switch"><input type="checkbox" name="captureMagnets"><span></span></span>
+        </label>
+      </section>
+
+      <section class="card">
         <h2>File types</h2>
         <p class="muted">Extensions to take over, separated by spaces. Files with no extension are taken over when the server says they're video, audio, an archive or a program.</p>
         <textarea name="fileTypes" rows="5" spellcheck="false" aria-label="File types"></textarea>

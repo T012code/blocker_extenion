@@ -50,12 +50,77 @@ pub enum DownloadStatus {
     /// The server refused the link (401/403/404/410). It has probably expired:
     /// capture it again from the browser to continue.
     NeedsRefresh,
+    /// A finished torrent still sharing with other people.
+    Seeding,
 }
 
 impl DownloadStatus {
+    /// Running now (pausing it makes sense).
     pub fn is_active(self) -> bool {
-        matches!(self, Self::Connecting | Self::Downloading)
+        matches!(self, Self::Connecting | Self::Downloading | Self::Seeding)
     }
+}
+
+/// What a download is. Web files are fetched by the engine itself; the other kinds
+/// are handed to a [`Runner`](crate::Runner) registered for them.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum DownloadKind {
+    /// A file at an http(s) address, fetched in sections.
+    #[default]
+    Http,
+    /// A video or audio stream from a web page (HLS, DASH, or a site like YouTube).
+    Media(MediaSpec),
+    /// A BitTorrent download from a magnet link or a .torrent file.
+    Torrent(TorrentSpec),
+}
+
+impl DownloadKind {
+    /// The name runners are registered under.
+    pub fn runner_name(&self) -> Option<&'static str> {
+        match self {
+            Self::Http => None,
+            Self::Media(_) => Some("media"),
+            Self::Torrent(_) => Some("torrent"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaSpec {
+    /// The page (or stream playlist) to download from.
+    pub page_url: String,
+    /// Which format to fetch, as the media tool understands it. `None` = best.
+    #[serde(default)]
+    pub format: Option<String>,
+    /// What the user picked, e.g. "1080p MP4".
+    #[serde(default)]
+    pub label: Option<String>,
+    #[serde(default)]
+    pub title: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TorrentSpec {
+    /// The magnet link, when added from one.
+    #[serde(default)]
+    pub magnet: Option<String>,
+    /// A saved copy of the .torrent file (also saved for magnets once known).
+    #[serde(default)]
+    pub torrent_file: Option<PathBuf>,
+    #[serde(default)]
+    pub info_hash: Option<String>,
+    /// Indexes of the files to download; `None` = all.
+    #[serde(default)]
+    pub only_files: Option<Vec<usize>>,
+    /// Bytes shared with other people so far.
+    #[serde(default)]
+    pub uploaded: u64,
+    /// Keep sharing until uploaded / size reaches this. 0 = stop as soon as done.
+    #[serde(default)]
+    pub seed_ratio: Option<f32>,
 }
 
 /// One byte range of the file. Bytes `start..pos` are on disk, `pos..end` are still to fetch.
@@ -120,6 +185,8 @@ pub struct Download {
     pub completed_at: Option<i64>,
     #[serde(default)]
     pub description: Option<String>,
+    #[serde(default)]
+    pub kind: DownloadKind,
 }
 
 impl Download {
@@ -145,6 +212,8 @@ pub struct NewDownload {
     pub queue_id: Option<i64>,
     #[serde(default)]
     pub description: Option<String>,
+    #[serde(default)]
+    pub kind: DownloadKind,
     /// Start right away. When false the download waits as `Queued`.
     #[serde(default)]
     pub start: bool,

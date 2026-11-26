@@ -89,7 +89,11 @@ fn write_native(w: &mut impl Write, msg: &Response) -> std::io::Result<()> {
 
 async fn forward(req: Request) -> Response {
     let path = ldm_ipc::default_path();
-    let timeout = Duration::from_secs(30);
+    // Finding video formats asks the site, which can take a while.
+    let timeout = Duration::from_secs(match req {
+        Request::MediaFormats { .. } => 120,
+        _ => 30,
+    });
     match ldm_ipc::request(&path, &req, timeout).await {
         Ok(Response::Pong {
             app_running,

@@ -16,9 +16,10 @@ use crate::filename;
 use crate::http;
 use crate::limiter::Limiter;
 use crate::model::{
-    Download, DownloadId, DownloadStatus, Event, NewDownload, ProbeInfo, RequestInfo, Segment,
-    UNKNOWN_END,
+    Download, DownloadId, DownloadKind, DownloadStatus, Event, NewDownload, ProbeInfo, RequestInfo,
+    Segment, UNKNOWN_END,
 };
+use crate::runner::{Job, Reporter, Runner};
 use crate::store::Store;
 use crate::transfer::{self, Progress, Sections, Transfer, TransferOptions};
 
@@ -78,14 +79,15 @@ pub struct Engine {
     inner: Arc<Inner>,
 }
 
-struct Inner {
+pub(crate) struct Inner {
     config: Mutex<EngineConfig>,
     client: Client,
     store: Mutex<Store>,
-    downloads: Mutex<BTreeMap<DownloadId, Download>>,
+    pub(crate) downloads: Mutex<BTreeMap<DownloadId, Download>>,
+    runners: Mutex<HashMap<&'static str, Arc<dyn Runner>>>,
     running: Mutex<HashMap<DownloadId, Running>>,
     global_limiter: Arc<Limiter>,
-    events: broadcast::Sender<Event>,
+    pub(crate) events: broadcast::Sender<Event>,
     /// Held while picking a free file name and creating the part file.
     naming: tokio::sync::Mutex<()>,
 }
@@ -136,6 +138,7 @@ impl Engine {
                 store: Mutex::new(store),
                 downloads: Mutex::new(downloads),
                 running: Mutex::new(HashMap::new()),
+                runners: Mutex::new(HashMap::new()),
                 events,
                 naming: tokio::sync::Mutex::new(()),
             }),
@@ -201,7 +204,13 @@ impl Engine {
     pub async fn add(&self, new: NewDownload) -> Result<DownloadId> {
         let url = reqwest::Url::parse(&new.request.url)
             .map_err(|e| Error::InvalidUrl(format!("{}: {e}", new.request.url)))?;
-        if !matches!(url.scheme(), "http" | "https") {
+        let scheme_ok = match &new.kind {
+            DownloadKind::Torrent(_) => {
+                matches!(url.scheme(), "magnet" | "http" | "https" | "file")
+            }
+            _ => matches!(url.scheme(), "http" | "https"),
+        };
+        if !scheme_ok {
             return Err(Error::InvalidUrl(format!(
                 "{}: only http and https are supported",
                 new.request.url
@@ -216,13 +225,31 @@ impl Engine {
         {
             Some(n) => (filename::sanitize(n), true),
             None => (
-                filename::from_url(&new.request.url)
-                    .map(|n| filename::sanitize(&n))
-                    .unwrap_or_else(|| "download".into()),
+                match &new.kind {
+                    DownloadKind::Http => filename::from_url(&new.request.url)
+                        .map(|n| filename::sanitize(&n))
+                        .unwrap_or_else(|| "download".into()),
+                    DownloadKind::Media(m) => {
+                        filename::sanitize(m.title.as_deref().unwrap_or("video"))
+                    }
+                    DownloadKind::Torrent(_) => magnet_name(&new.request.url)
+                        .map(|n| filename::sanitize(&n))
+                        .unwrap_or_else(|| "torrent".into()),
+                },
                 false,
             ),
         };
-        let category = Category::from_file_name(&file_name);
+        let category = match &new.kind {
+            DownloadKind::Media(m)
+                if m.label
+                    .as_deref()
+                    .is_some_and(|l| l.to_lowercase().contains("audio")) =>
+            {
+                Category::Music
+            }
+            DownloadKind::Media(_) => Category::Video,
+            _ => Category::from_file_name(&file_name),
+        };
         let (save_dir, dir_locked) = match new.save_dir {
             Some(d) => (d, true),
             None => (config.dir_for(category), false),
@@ -254,6 +281,7 @@ impl Engine {
             created_at: now_ms(),
             completed_at: None,
             description: new.description,
+            kind: new.kind,
         };
         self.inner.store.lock().unwrap().save(&d)?;
         self.inner.downloads.lock().unwrap().insert(id, d.clone());
@@ -289,8 +317,26 @@ impl Engine {
         );
         drop(running);
         let inner = self.inner.clone();
+        let runner = match d.kind.runner_name() {
+            Some(name) => match self.inner.runners.lock().unwrap().get(name).cloned() {
+                Some(r) => Some(r),
+                None => {
+                    self.inner.running.lock().unwrap().remove(&id);
+                    let msg = format!("this version can't download {name} items");
+                    self.inner.update(id, true, |d| {
+                        d.status = DownloadStatus::Failed;
+                        d.error = Some(msg.clone());
+                    });
+                    return Err(Error::Other(msg));
+                }
+            },
+            None => None,
+        };
         tokio::spawn(async move {
-            let result = drive(&inner, id, &cancel, limiter, sections).await;
+            let result = match runner {
+                Some(runner) => run_with(&inner, id, runner, cancel.clone()).await,
+                None => drive(&inner, id, &cancel, limiter, sections).await,
+            };
             inner.running.lock().unwrap().remove(&id);
             let (status, error) = match result {
                 Ok(()) => (DownloadStatus::Completed, None),
@@ -354,6 +400,11 @@ impl Engine {
         self.inner.store.lock().unwrap().delete(id)?;
         if let Some(tmp) = &d.temp_path {
             let _ = std::fs::remove_file(tmp);
+        }
+        if let Some(name) = d.kind.runner_name()
+            && let Some(r) = self.inner.runners.lock().unwrap().get(name).cloned()
+        {
+            r.removed(&d, delete_file);
         }
         if delete_file && d.status == DownloadStatus::Completed {
             let _ = std::fs::remove_file(d.final_path());
@@ -453,6 +504,11 @@ impl Engine {
         Ok(())
     }
 
+    /// Registers the runner for a kind of download ("torrent" or "media").
+    pub fn set_runner(&self, name: &'static str, runner: Arc<dyn Runner>) {
+        self.inner.runners.lock().unwrap().insert(name, runner);
+    }
+
     pub fn set_global_speed_limit(&self, bytes_per_sec: u64) {
         self.update_config(|c| c.global_speed_limit = bytes_per_sec);
     }
@@ -460,7 +516,7 @@ impl Engine {
 
 impl Inner {
     /// Changes a download, saves it, and (when `announce`) tells the UI.
-    fn update(
+    pub(crate) fn update(
         &self,
         id: DownloadId,
         announce: bool,
@@ -727,4 +783,51 @@ async fn report(
             });
         }
     }
+}
+
+/// Runs a download through its runner and marks it complete when it finishes.
+async fn run_with(
+    inner: &Arc<Inner>,
+    id: DownloadId,
+    runner: Arc<dyn Runner>,
+    cancel: CancellationToken,
+) -> Result<()> {
+    let download = inner.get(id)?;
+    inner.update(id, true, |d| {
+        d.status = DownloadStatus::Connecting;
+        d.error = None;
+    });
+    let report = Reporter {
+        inner: inner.clone(),
+        id,
+    };
+    runner
+        .run(Job {
+            download,
+            cancel,
+            report,
+        })
+        .await?;
+    inner.update(id, true, |d| {
+        d.status = DownloadStatus::Completed;
+        d.error = None;
+        if let Some(size) = d.size {
+            d.downloaded = size;
+        }
+        d.completed_at = Some(now_ms());
+    });
+    Ok(())
+}
+
+/// The `dn` (display name) of a magnet link.
+fn magnet_name(url: &str) -> Option<String> {
+    let query = url.strip_prefix("magnet:?")?;
+    query.split('&').find_map(|kv| {
+        let (k, v) = kv.split_once('=')?;
+        (k == "dn").then(|| {
+            percent_encoding::percent_decode_str(&v.replace('+', " "))
+                .decode_utf8_lossy()
+                .into_owned()
+        })
+    })
 }

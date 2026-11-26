@@ -27,6 +27,8 @@ async function store() {
   try {
     await api.storage.session.set({ hostState: state });
   } catch { /* session storage missing in very old browsers */ }
+  // Content scripts can't read session storage everywhere; they only need this flag.
+  api.storage.local.set({ hostReady: !!state.installed }).catch(() => {});
   updateBadge();
 }
 

@@ -87,7 +87,7 @@ function row(d) {
   if (what) {
     btn = document.createElement('button');
     btn.className = `act ${what === 'continue' ? 'go' : ''}`;
-    btn.textContent = what === 'pause' ? 'Pause' : 'Continue';
+    btn.textContent = d.status === 'seeding' ? 'Stop sharing' : what === 'pause' ? 'Pause' : 'Continue';
     btn.disabled = busy.has(d.id);
     if (what === 'pause' && !d.resumable) {
       btn.title = 'This server can\'t resume downloads. Continuing later starts the file again from the beginning.';
@@ -113,11 +113,19 @@ function row(d) {
     parts.push(bytes(d.size));
   }
   if (d.status === 'downloading') {
-    parts.push(speed(d.speed), eta((d.size ?? 0) - d.downloaded, d.speed), `${d.connections} sections`);
+    parts.push(speed(d.speed), eta((d.size ?? 0) - d.downloaded, d.speed));
+    if (d.kind === 'file') parts.push(`${d.connections} sections`);
   }
+  if (d.status === 'seeding') parts.push('done, sharing with others');
   if (d.status === 'needsRefresh') parts.push('download it again from the page to continue');
   meta.textContent = parts.filter(Boolean).join(' · ');
-  if (!d.resumable && d.status !== 'completed' && d.status !== 'queued' && d.size !== null) {
+  if (d.kind === 'torrent' || d.kind === 'video') {
+    const tag = document.createElement('span');
+    tag.className = 'badge info';
+    tag.textContent = d.kind === 'torrent' ? 'Torrent' : 'Video';
+    meta.prepend(tag);
+  }
+  if (d.kind === 'file' && !d.resumable && d.status !== 'completed' && d.status !== 'queued' && d.size !== null) {
     const tag = document.createElement('span');
     tag.className = 'badge warn';
     tag.textContent = 'Can\'t resume';

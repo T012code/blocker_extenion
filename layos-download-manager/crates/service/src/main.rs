@@ -37,7 +37,25 @@ async fn main() {
             }
         }
     });
-    let service = Service::new(engine, Arc::new(NoFrontend));
+    // Torrents and video streams are handled by their own runners.
+    let app_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()));
+    let tools = ldm_media::Tools::find(app_dir.as_deref());
+    if tools.ytdlp.is_none() {
+        eprintln!("yt-dlp not found: the video button will not be able to list formats");
+    }
+    engine.set_runner(
+        "media",
+        ldm_media::MediaRunner::new(tools.clone(), dir.join("media-work")),
+    );
+    match ldm_torrent::TorrentRunner::start(ldm_torrent::TorrentOptions::new(dir.join("torrents")))
+        .await
+    {
+        Ok(t) => engine.set_runner("torrent", t),
+        Err(e) => eprintln!("torrents are unavailable: {e:#}"),
+    }
+    let service = Service::new(engine, Arc::new(NoFrontend)).with_media_tools(tools);
     let path = ldm_ipc::default_path();
     eprintln!(
         "Layó's Download Manager (headless) listening on {path}, saving to {}",

@@ -47,6 +47,10 @@ export const DEFAULT_SETTINGS = Object.freeze({
   ask: 'app',
   /** Show a notification when a download goes back to the browser. */
   notifyFallback: true,
+  /** Show the "Download" button over videos. */
+  videoButton: true,
+  /** Open magnet links in Layó's Download Manager. */
+  captureMagnets: true,
 });
 
 export function parseFileTypes(text) {
