@@ -345,3 +345,27 @@ pub async fn queue_delete(
 pub fn set_queue(state: S, ids: Vec<i64>, queue_id: Option<i64>) -> R<()> {
     state.queues.assign(&ids, queue_id)
 }
+
+// ---------------------------------------------------------------- scheduler and grabber
+
+use ldm_service::grabber::{GrabOptions, GrabResult};
+use ldm_service::queues::Schedule;
+
+/// Sets (or clears, with `None`) when a queue starts and stops by itself.
+#[tauri::command]
+pub fn queue_schedule(state: S, id: i64, schedule: Option<Schedule>) -> R<Queue> {
+    state.queues.set_schedule(id, schedule)
+}
+
+/// Lists the files a website links to (nothing is downloaded yet).
+#[tauri::command]
+pub async fn grab_site(options: GrabOptions) -> R<GrabResult> {
+    let client = ldm_engine::http::build_client().map_err(err)?;
+    ldm_service::grabber::grab(&client, &options).await
+}
+
+/// Cancels a shutdown a finished queue asked for.
+#[tauri::command]
+pub fn cancel_shutdown() -> R<()> {
+    crate::power::cancel_shutdown()
+}

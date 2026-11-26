@@ -3,7 +3,7 @@
 
 import { invoke, listen } from './backend.js';
 import { STATUS_TEXT, action, bytes, eta, percent, speed } from './format.js';
-import { initDialogs, openAdd, openDeleteQueue, openQueue, openRemove, openSettings } from './dialogs.js';
+import { initDialogs, openAdd, openDeleteQueue, openGrab, openQueue, openRemove, openSchedule, openSettings } from './dialogs.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -72,13 +72,10 @@ function kindLabel(d) {
   return ext && ext !== d.fileName.toUpperCase() ? ext : 'FILE';
 }
 
+/** Status as a word with a shape (never colour alone). */
 function statusBadge(d) {
   const b = document.createElement('span');
-  const cls = {
-    completed: 'ok', seeding: 'ok', downloading: 'info', connecting: 'info',
-    paused: 'plain', queued: 'plain', failed: 'bad', needsRefresh: 'warn', blocked: 'warn',
-  }[d.status] ?? 'plain';
-  b.className = `badge ${cls}`;
+  b.className = `status s-${d.status}`;
   b.textContent = STATUS_TEXT[d.status] ?? d.status;
   return b;
 }
@@ -92,6 +89,7 @@ function renderRow(d) {
   const pct = d.status === 'completed' ? 100 : percent(p.done, p.size);
   tr.className = `${d.status}${selected.has(d.id) ? ' selected' : ''}`;
   tr.setAttribute('aria-selected', selected.has(d.id) ? 'true' : 'false');
+  if (d.id === lastClicked) tr.dataset.cursor = '1';
 
   const name = document.createElement('td');
   name.innerHTML = '<div class="name"><span class="kind"></span><span class="text"></span></div>';
@@ -103,9 +101,9 @@ function renderRow(d) {
   size.textContent = p.size ? bytes(p.size) : '';
 
   const prog = document.createElement('td');
-  prog.innerHTML = '<div class="bar"><span></span></div>';
-  prog.querySelector('span').style.width = `${pct ?? 0}%`;
-  prog.title = pct != null ? `${pct}%` : bytes(p.done);
+  prog.innerHTML = '<div class="progress"><div class="bar"><span></span></div><span class="pct"></span></div>';
+  prog.querySelector('.bar span').style.setProperty('--p', String((pct ?? 0) / 100));
+  prog.querySelector('.pct').textContent = pct != null ? `${pct}%` : '';
 
   const sp = document.createElement('td');
   sp.textContent = d.status === 'downloading' ? speed(p.speed) : '';
@@ -129,6 +127,14 @@ export function render() {
     const shown = list.filter(matches);
     $('rows').replaceChildren(...shown.map(renderRow));
     $('empty').hidden = shown.length > 0;
+    if (!shown.length) {
+      const q = currentQueue();
+      $('empty-title').textContent = query ? 'No matches' : q ? `"${q.name}" is empty` : list.length ? 'Nothing in this view' : 'Nothing here yet';
+      $('empty-text').textContent = query ? `Nothing matches "${query}".`
+        : q ? 'Add downloads to this queue, or move them here from the details of any download.'
+          : 'Add a download, paste a link anywhere in this window, or download something in your browser.';
+      $('empty-add').hidden = !!query;
+    }
     renderQueues(list);
     renderCounts(list);
     renderToolbar();
@@ -164,7 +170,10 @@ function renderQueues(list) {
     b.className = `nav-item${filter === `queue:${q.id}` ? ' active' : ''}`;
     b.dataset.filter = `queue:${q.id}`;
     const n = document.createElement('span');
-    n.textContent = q.running ? `${q.name} (running)` : q.name;
+    n.className = 'label';
+    if (q.running) n.append(Object.assign(document.createElement('span'), { className: 'running-mark', title: 'Running' }));
+    n.append(q.name);
+    b.title = q.running ? `${q.name}, running` : q.name;
     const c = document.createElement('span');
     c.className = 'count';
     const count = list.filter((d) => d.queueId === q.id).length;
@@ -180,7 +189,8 @@ function renderQueues(list) {
   const inQueue = list.filter((d) => d.queueId === q.id);
   const running = inQueue.filter((d) => isActive(d.status)).length;
   const waiting = inQueue.filter((d) => d.status === 'queued').length;
-  $('qb-state').textContent = `${q.running ? 'Running' : 'Stopped'} · ${running} downloading · ${waiting} waiting`;
+  const sched = q.schedule?.start ? ` · starts at ${q.schedule.start}` : '';
+  $('qb-state').textContent = `${q.running ? 'Running' : 'Stopped'} · ${running} downloading · ${waiting} waiting${sched}`;
   $('qb-start').disabled = q.running;
   $('qb-stop').disabled = !q.running;
   if (document.activeElement !== $('qb-max')) {
@@ -220,7 +230,10 @@ function renderSpeed() {
 function renderBanner(list) {
   const blocked = list.filter((d) => d.status === 'blocked');
   $('privacy-banner').hidden = blocked.length === 0;
-  if (blocked.length) $('privacy-banner-text').textContent = blocked[0].error || 'Torrents are waiting for a VPN or proxy.';
+  if (blocked.length) {
+    const n = blocked.length;
+    $('privacy-banner-text').textContent = n === 1 ? 'A torrent is waiting for a VPN or proxy.' : `${n} torrents are waiting for a VPN or proxy.`;
+  }
 }
 
 // ---------- details
@@ -244,7 +257,7 @@ function renderMap(d, p) {
     seg.className = 'seg';
     seg.style.cssText = 'left:0;width:100%';
     seg.innerHTML = '<div class="fill"></div>';
-    seg.firstChild.style.width = `${pct}%`;
+    seg.firstChild.style.setProperty('--p', String(pct / 100));
     map.replaceChildren(seg);
     map.setAttribute('aria-label', `${pct}% downloaded`);
     return;
@@ -259,13 +272,13 @@ function renderMap(d, p) {
     el.style.setProperty('--cursor', `calc(${done * 100}% - 3px)`);
     const fill = document.createElement('div');
     fill.className = 'fill';
-    fill.style.width = `${done * 100}%`;
+    fill.style.setProperty('--p', String(done));
     el.append(fill);
     return el;
   }));
   const active = segs.filter((s) => s.active).length;
   map.setAttribute('aria-label', `${segs.length} sections, ${active} downloading`);
-  map.title = `${segs.length} sections · ${active} connections downloading`;
+  $('d-map-caption').textContent = `${segs.length} sections · ${active} downloading now`;
 }
 
 function fillSectionSelect(select, value) {
@@ -289,6 +302,7 @@ function renderDetails() {
   const p = progressOf(d);
   $('d-name').textContent = d.fileName;
   $('d-status').replaceWith(Object.assign(statusBadge(d), { id: 'd-status' }));
+  $('d-map-caption').textContent = '';
   const pct = d.status === 'completed' ? 100 : percent(p.done, p.size);
   $('d-done').textContent = p.size ? `${bytes(p.done)} of ${bytes(p.size)}${pct != null ? ` (${pct}%)` : ''}` : bytes(p.done);
   $('d-speed').textContent = d.status === 'downloading' ? speed(p.speed) || '—' : '—';
@@ -296,10 +310,10 @@ function renderDetails() {
   const http = kindOf(d) === 'http';
   $('d-sections-wrap').hidden = !http;
   if (http && document.activeElement !== $('d-sections')) fillSectionSelect($('d-sections'), d.connections);
-  $('d-resume').textContent = isTorrent(d) ? 'Yes (pieces are kept)'
+  $('d-resume').textContent = isTorrent(d) ? 'Yes, pieces are kept'
     : kindOf(d) === 'media' ? 'Yes'
       : d.size == null && d.status === 'queued' ? 'Checked when it starts'
-        : d.resumable ? 'Yes' : 'No — it starts again from the beginning';
+        : d.resumable ? 'Yes' : 'No, it starts over';
   $('d-path').textContent = `${d.saveDir}${d.saveDir.includes('\\') ? '\\' : '/'}${d.fileName}`;
   $('d-url').textContent = d.request?.url ?? '';
   $('d-error-wrap').hidden = !d.error || d.status === 'completed';
@@ -378,7 +392,157 @@ function onRowDoubleClick(e) {
   else if (action(d.status) === 'pause') run(invoke('pause', { ids: [d.id] }), 'Couldn\'t pause');
 }
 
+// ---------- menus
+
+function closeMenus() {
+  for (const m of document.querySelectorAll('.menu')) m.hidden = true;
+  $('btn-more').setAttribute('aria-expanded', 'false');
+}
+
+/** Opens a menu at a point, kept inside the window, with focus on its first item. */
+function openMenu(menu, x, y) {
+  closeMenus();
+  menu.hidden = false;
+  const r = menu.getBoundingClientRect();
+  menu.style.left = `${Math.max(8, Math.min(x, innerWidth - r.width - 8))}px`;
+  menu.style.top = `${Math.max(8, Math.min(y, innerHeight - r.height - 8))}px`;
+  menu.querySelector('button:not(:disabled)')?.focus();
+}
+
+function menuItem(label, onClick, { disabled = false, danger = false, kbd = '' } = {}) {
+  const b = document.createElement('button');
+  b.setAttribute('role', 'menuitem');
+  b.textContent = label;
+  b.disabled = disabled;
+  if (danger) b.className = 'danger';
+  if (kbd) b.append(Object.assign(document.createElement('span'), { className: 'kbd', textContent: kbd }));
+  b.addEventListener('click', () => { closeMenus(); onClick(); });
+  return b;
+}
+
+/** Right-click (or Menu key) on downloads. */
+function openRowMenu(x, y) {
+  const sel = selectedDownloads();
+  if (!sel.length) return;
+  const one = sel.length === 1 ? sel[0] : null;
+  const canGo = sel.some((d) => action(d.status) === 'continue');
+  const canPause = sel.some((d) => action(d.status) === 'pause');
+  const items = [];
+  if (one) {
+    items.push(menuItem('Open', () => run(invoke('open_download', { id: one.id }), 'Couldn\'t open it'), { disabled: one.status !== 'completed' && one.status !== 'seeding', kbd: 'Enter' }));
+    items.push(menuItem('Show in folder', () => run(invoke('show_in_folder', { id: one.id }), 'Couldn\'t show the folder')));
+    items.push(document.createElement('hr'));
+  }
+  items.push(menuItem('Continue', resumeSelected, { disabled: !canGo, kbd: 'Ctrl+R' }));
+  items.push(menuItem('Pause', pauseSelected, { disabled: !canPause, kbd: 'Ctrl+P' }));
+  if (queues.length) {
+    items.push(document.createElement('hr'));
+    for (const q of queues) {
+      items.push(menuItem(`Move to "${q.name}"`, async () => {
+        await run(invoke('set_queue', { ids: sel.map((d) => d.id), queueId: q.id }), 'Couldn\'t move them');
+        toast(`Moved to ${q.name}`);
+      }, { disabled: sel.every((d) => d.queueId === q.id) }));
+    }
+    if (sel.some((d) => d.queueId != null)) {
+      items.push(menuItem('Take out of queue', () => run(invoke('set_queue', { ids: sel.map((d) => d.id), queueId: null }), 'Couldn\'t move them')));
+    }
+  }
+  items.push(document.createElement('hr'));
+  if (one) items.push(menuItem('Copy address', () => copyAddress(one)));
+  items.push(menuItem(one ? 'Remove from list…' : `Remove ${sel.length} from list…`, () => openRemove(sel), { danger: true, kbd: 'Del' }));
+  $('menu-row').replaceChildren(...items);
+  openMenu($('menu-row'), x, y);
+}
+
+async function copyAddress(d) {
+  try {
+    await navigator.clipboard.writeText(d.request?.url ?? '');
+    toast('Address copied');
+  } catch {
+    toast('Couldn\'t copy');
+  }
+}
+
+/** ↑/↓ move, Shift extends, Enter opens or continues, Space pauses or continues. */
+function onListKey(e) {
+  const rows = [...$('rows').children];
+  if (!rows.length) return;
+  const ids = rows.map((r) => Number(r.dataset.id));
+  const at = ids.indexOf(lastClicked);
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    const next = Math.max(0, Math.min(ids.length - 1, at < 0 ? 0 : at + (e.key === 'ArrowDown' ? 1 : -1)));
+    if (!e.shiftKey) selected.clear();
+    selected.add(ids[next]);
+    lastClicked = ids[next];
+    render();
+    requestAnimationFrame(() => rows[next]?.scrollIntoView({ block: 'nearest' }));
+  } else if (e.key === 'Enter' && selected.size === 1) {
+    e.preventDefault();
+    onRowDoubleClick({ target: rows[at] ?? rows[0] });
+  } else if (e.key === ' ' && selected.size) {
+    e.preventDefault();
+    if (selectedDownloads().some((d) => action(d.status) === 'pause')) pauseSelected(); else resumeSelected();
+  } else if ((e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) && selected.size) {
+    e.preventDefault();
+    const r = rows[at]?.getBoundingClientRect() ?? $('list').getBoundingClientRect();
+    openRowMenu(r.left + 40, r.bottom);
+  }
+}
+
+function bindExtras() {
+  $('list').addEventListener('keydown', onListKey);
+  $('rows').addEventListener('contextmenu', (e) => {
+    const tr = e.target.closest('tr[data-id]');
+    if (!tr) return;
+    e.preventDefault();
+    const id = Number(tr.dataset.id);
+    if (!selected.has(id)) {
+      selected.clear();
+      selected.add(id);
+      lastClicked = id;
+      render();
+    }
+    openRowMenu(e.clientX, e.clientY);
+  });
+  $('btn-more').addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!$('menu-more').hidden) return closeMenus();
+    const r = $('btn-more').getBoundingClientRect();
+    openMenu($('menu-more'), r.left, r.bottom + 4);
+    $('btn-more').setAttribute('aria-expanded', 'true');
+  });
+  $('btn-grab').addEventListener('click', () => openGrab());
+  $('btn-clear-finished').addEventListener('click', () => openRemove(selectedDownloads(), 'finished'));
+  $('empty-add').addEventListener('click', () => openAdd());
+  $('qb-schedule').addEventListener('click', () => { const q = currentQueue(); if (q) openSchedule(q); });
+  addEventListener('mousedown', (e) => { if (!e.target.closest('.menu, #btn-more')) closeMenus(); });
+  addEventListener('blur', closeMenus);
+  addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && document.querySelector('.menu:not([hidden])')) { closeMenus(); e.stopPropagation(); }
+    // Arrow keys inside an open menu.
+    const menu = document.querySelector('.menu:not([hidden])');
+    if (menu && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      e.preventDefault();
+      const items = [...menu.querySelectorAll('button:not(:disabled)')];
+      const i = items.indexOf(document.activeElement);
+      items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus();
+    }
+  }, true);
+  // A finished queue asked to shut the computer down: offer to cancel.
+  listen('shutdown-pending', (name) => {
+    $('shutdown-text').textContent = `"${name}" is done. The computer shuts down in about a minute.`;
+    $('shutdown-banner').hidden = false;
+  });
+  $('shutdown-cancel').addEventListener('click', async () => {
+    await run(invoke('cancel_shutdown'), 'Couldn\'t cancel');
+    $('shutdown-banner').hidden = true;
+    toast('Shutdown cancelled');
+  });
+}
+
 function bind() {
+  bindExtras();
   $('rows').addEventListener('click', onRowClick);
   $('rows').addEventListener('dblclick', onRowDoubleClick);
   $('nav').addEventListener('click', (e) => {
@@ -416,11 +580,7 @@ function bind() {
   $('credit').addEventListener('click', () => run(invoke('open_portfolio'), 'Couldn\'t open the link'));
   $('d-open').addEventListener('click', () => { const [d] = selectedDownloads(); if (d) run(invoke('open_download', { id: d.id }), 'Couldn\'t open it'); });
   $('d-folder').addEventListener('click', () => { const [d] = selectedDownloads(); if (d) run(invoke('show_in_folder', { id: d.id }), 'Couldn\'t show the folder'); });
-  $('d-copy').addEventListener('click', async () => {
-    const [d] = selectedDownloads();
-    if (!d) return;
-    try { await navigator.clipboard.writeText(d.request?.url ?? ''); toast('Address copied'); } catch { toast('Couldn\'t copy'); }
-  });
+  $('d-copy').addEventListener('click', () => { const [d] = selectedDownloads(); if (d) copyAddress(d); });
   $('d-sections').addEventListener('change', async (e) => {
     const [d] = selectedDownloads();
     if (!d) return;
@@ -431,6 +591,7 @@ function bind() {
     if (e.target.closest('input, select, textarea, dialog')) return;
     const ctrl = e.ctrlKey || e.metaKey;
     if (ctrl && e.key.toLowerCase() === 'n') { e.preventDefault(); openAdd(); }
+    else if (ctrl && e.key === ',') { e.preventDefault(); openSettings(); }
     else if (ctrl && e.key.toLowerCase() === 'a') { e.preventDefault(); for (const r of $('rows').children) selected.add(Number(r.dataset.id)); render(); }
     else if (ctrl && e.key.toLowerCase() === 'p') { e.preventDefault(); pauseSelected(); }
     else if (ctrl && e.key.toLowerCase() === 'r') { e.preventDefault(); resumeSelected(); }

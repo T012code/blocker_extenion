@@ -1,5 +1,6 @@
-/* Shared look for the pop-up and settings page, in the colours of layothedeveloper.com.
-   Colour tokens live in ../brand/tokens.css (a copy of layos-download-manager/brand/tokens.css). */
+/* Hallmark · macrostructure: grouped settings list · tone: modern-minimal · anchor hue: 263 (cobalt) */
+/* Shared look for the pop-up and settings page. Tokens live in ../brand/tokens.css
+   (a copy of layos-download-manager/brand/tokens.css, refreshed by the build). */
 @import url("../brand/tokens.css");
 
 @font-face {
@@ -21,50 +22,60 @@
     U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
-:root { color-scheme: light dark; --radius-sm: 10px; --radius: 14px; }
+:root { color-scheme: light dark; }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--paper); color: var(--ink); font: 14px/1.5 var(--font); }
-h1, h2 { font-weight: 640; font-stretch: 112%; letter-spacing: -0.01em; margin: 0; }
+html, body { overflow-x: clip; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: var(--text-md)/1.5 var(--font); -webkit-font-smoothing: antialiased; }
+h1, h2 { font-weight: 640; font-stretch: 108%; letter-spacing: -0.01em; margin: 0; }
+p { margin: 0; }
 a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
 a:hover { color: var(--accent-strong); }
-.card { background: var(--card); border: 1px solid var(--rule); border-radius: var(--radius); padding: 14px 16px; }
 .muted { color: var(--ink-muted); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.card { background: var(--card); border: 1px solid var(--rule); border-radius: var(--radius-md); padding: var(--space-4); }
+
 button {
-  font: inherit; font-weight: 560; border-radius: 6px; padding: 6px 14px; cursor: pointer;
-  border: 1px solid var(--rule); background: var(--card); color: var(--ink);
-  transition: background-color 160ms, border-color 160ms, color 160ms;
+  font: inherit; font-weight: 560; min-height: 32px; padding: 0 var(--space-3); cursor: pointer;
+  border: 1px solid var(--rule-strong); border-radius: var(--radius-sm); background: var(--card); color: var(--ink);
+  transition: background-color var(--dur-micro) var(--ease-out), transform var(--dur-micro) var(--ease-out);
 }
 button:hover:not(:disabled) { background: var(--surface); }
+button:active:not(:disabled) { transform: scale(0.97); }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 button.primary:hover:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); }
-button:disabled { opacity: 0.55; cursor: default; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Disabled: still a button (faint outline), still readable. */
+button:disabled, button.primary:disabled { color: var(--ink-muted); border-color: var(--rule); background: transparent; cursor: default; }
 input[type=text], input[type=number], select, textarea {
-  font: inherit; color: var(--ink); background: var(--paper); border: 1px solid var(--rule);
-  border-radius: var(--radius-sm); padding: 7px 10px; width: 100%;
+  font: inherit; color: var(--ink); background: var(--paper); border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm); min-height: 36px; padding: 0 var(--space-3); width: 100%;
 }
-textarea { resize: vertical; min-height: 70px; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13px; }
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline-offset: 0; }
+textarea { resize: vertical; min-height: 72px; padding: var(--space-2) var(--space-3); font-family: var(--font-mono); font-size: var(--text-sm); }
 
-/* Toggle switch */
+/* Switch: square track and knob (no capsules). */
 .switch { position: relative; display: inline-block; width: 40px; height: 22px; flex: none; }
 .switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
-.switch span { position: absolute; inset: 0; border-radius: 4px; border: 1px solid var(--ink-muted); transition: 160ms; pointer-events: none; }
-.switch span::before { content: ""; position: absolute; width: 14px; height: 14px; left: 3px; top: 3px; border-radius: 2px; background: var(--ink-muted); transition: 160ms; }
+.switch span { position: absolute; inset: 0; border-radius: var(--radius-xs); border: 1.5px solid var(--ink-muted); transition: background-color var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out); pointer-events: none; }
+.switch span::before { content: ""; position: absolute; width: 14px; height: 14px; left: 2.5px; top: 2.5px; border-radius: 2px; background: var(--ink-muted); transition: transform var(--dur-base) var(--ease-out), background-color var(--dur-micro) var(--ease-out); }
 .switch input:checked + span { background: var(--accent); border-color: var(--accent); }
 .switch input:checked + span::before { transform: translateX(18px); background: var(--accent-ink); }
+.switch input:focus-visible + span { outline: 2px solid var(--focus); outline-offset: 2px; }
 
-/* Status labels: tinted, outlined boxes (no status dots). */
-.badge {
-  display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 3px;
-  font-size: 12px; font-weight: 600; white-space: nowrap; border: 1px solid currentColor;
-}
-.badge.ok { color: var(--success); background: color-mix(in srgb, var(--success) 12%, transparent); }
-.badge.warn { color: var(--warning); background: color-mix(in srgb, var(--warning) 12%, transparent); }
-.badge.bad { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
-.badge.info { color: var(--accent); background: var(--accent-soft); }
+/* Status: a word with a shape, never colour alone, never a boxed tag. */
+.badge { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); font-weight: 600; white-space: nowrap; color: var(--ink-muted); }
+.badge::before { content: ""; width: 8px; height: 8px; flex: none; background: currentColor; border-radius: 1px; }
+.badge.ok { color: var(--success); }
+.badge.info { color: var(--accent); }
+.badge.info::before { clip-path: polygon(0 0, 100% 50%, 0 100%); }
+.badge.warn { color: var(--warning); }
+.badge.warn::before { clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.badge.bad { color: var(--danger); }
+.badge.bad::before { transform: rotate(45deg); }
+.badge.plain::before { background: transparent; box-shadow: inset 0 0 0 1.5px currentColor; }
 
-/* "Developed by Layó" credit */
-.credit { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-muted); }
+/* "Developed by Layó" */
+.credit { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-xs); color: var(--ink-muted); }
 .credit img { width: 14px; height: 14px; }
 .credit .mark-dark { display: none; }
 @media (prefers-color-scheme: dark) {
@@ -73,3 +84,7 @@ textarea { resize: vertical; min-height: 70px; font-family: ui-monospace, "Casca
 }
 .credit a { color: var(--ink); font-weight: 600; text-decoration: none; }
 .credit a:hover { color: var(--accent); text-decoration: underline; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 120ms !important; transition-property: opacity, background-color, color !important; }
+}

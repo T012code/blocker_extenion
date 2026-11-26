@@ -8,30 +8,32 @@
 </head>
 <body>
   <div class="app">
-    <aside class="sidebar" aria-label="Categories">
+    <aside class="sidebar" aria-label="Library">
       <div class="brand">
         <img src="brand/app-icon.png" alt="" width="28" height="28">
         <span>Layó's Download&nbsp;Manager</span>
       </div>
-      <nav id="nav">
-        <button class="nav-item active" data-filter="all"><span>All downloads</span><span class="count" data-count="all"></span></button>
-        <button class="nav-item" data-filter="active"><span>Active</span><span class="count" data-count="active"></span></button>
-        <button class="nav-item" data-filter="done"><span>Finished</span><span class="count" data-count="done"></span></button>
-        <button class="nav-item" data-filter="stopped"><span>Paused &amp; failed</span><span class="count" data-count="stopped"></span></button>
+      <nav id="nav" aria-label="Downloads">
+        <button class="nav-item active" data-filter="all"><span class="label">All downloads</span><span class="count" data-count="all"></span></button>
+        <button class="nav-item" data-filter="active"><span class="label">Active</span><span class="count" data-count="active"></span></button>
+        <button class="nav-item" data-filter="done"><span class="label">Finished</span><span class="count" data-count="done"></span></button>
+        <button class="nav-item" data-filter="stopped"><span class="label">Paused and failed</span><span class="count" data-count="stopped"></span></button>
         <p class="nav-head">Categories</p>
-        <button class="nav-item" data-filter="video"><span>Video</span><span class="count" data-count="video"></span></button>
-        <button class="nav-item" data-filter="music"><span>Music</span><span class="count" data-count="music"></span></button>
-        <button class="nav-item" data-filter="documents"><span>Documents</span><span class="count" data-count="documents"></span></button>
-        <button class="nav-item" data-filter="compressed"><span>Compressed</span><span class="count" data-count="compressed"></span></button>
-        <button class="nav-item" data-filter="programs"><span>Programs</span><span class="count" data-count="programs"></span></button>
-        <button class="nav-item" data-filter="torrents"><span>Torrents</span><span class="count" data-count="torrents"></span></button>
-        <button class="nav-item" data-filter="general"><span>Other</span><span class="count" data-count="general"></span></button>
-        <p class="nav-head nav-head-row"><span>Queues</span><button class="btn icon tiny" id="btn-new-queue" title="New queue" aria-label="New queue"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button></p>
+        <button class="nav-item" data-filter="video"><span class="label">Video</span><span class="count" data-count="video"></span></button>
+        <button class="nav-item" data-filter="music"><span class="label">Music</span><span class="count" data-count="music"></span></button>
+        <button class="nav-item" data-filter="documents"><span class="label">Documents</span><span class="count" data-count="documents"></span></button>
+        <button class="nav-item" data-filter="compressed"><span class="label">Compressed</span><span class="count" data-count="compressed"></span></button>
+        <button class="nav-item" data-filter="programs"><span class="label">Programs</span><span class="count" data-count="programs"></span></button>
+        <button class="nav-item" data-filter="torrents"><span class="label">Torrents</span><span class="count" data-count="torrents"></span></button>
+        <button class="nav-item" data-filter="general"><span class="label">Other</span><span class="count" data-count="general"></span></button>
+        <p class="nav-head nav-head-row"><span>Queues</span>
+          <button class="btn icon subtle" id="btn-new-queue" title="New queue" aria-label="New queue"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9"/></svg></button>
+        </p>
         <div id="queue-nav"></div>
       </nav>
       <div class="sidebar-foot">
         <div class="total-speed"><span class="muted">Speed</span> <strong id="total-speed">0 B/s</strong></div>
-        <button class="credit" id="credit" type="button" title="layothedeveloper.com">
+        <button class="credit" id="credit" type="button" title="Opens layothedeveloper.com">
           <img class="mark-light" src="brand/layo-mark-light.svg" alt="">
           <img class="mark-dark" src="brand/layo-mark-dark.svg" alt="">
           <span>Developed by <strong>Layó</strong></span>
@@ -40,34 +42,40 @@
     </aside>
 
     <main class="main">
-      <header class="toolbar">
+      <header class="toolbar" aria-label="Actions">
         <button class="btn primary" id="btn-add" title="Add a download (Ctrl+N)">
-          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg>Add
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9"/></svg>Add
         </button>
-        <div class="group">
+        <div class="group" role="group" aria-label="Selected downloads">
           <button class="btn" id="btn-resume" disabled title="Continue (Ctrl+R)">
             <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5v9l7-4.5z"/></svg>Continue
           </button>
           <button class="btn" id="btn-pause" disabled title="Pause (Ctrl+P)">
             <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3.5v9M10.5 3.5v9"/></svg>Pause
           </button>
-          <button class="btn" id="btn-delete" disabled title="Remove (Delete)">
+          <button class="btn" id="btn-delete" disabled title="Remove from list (Delete)">
             <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 8.5h4.8l.6-8.5"/></svg>Remove
           </button>
         </div>
-        <div class="group">
-          <button class="btn subtle" id="btn-resume-all">Continue all</button>
-          <button class="btn subtle" id="btn-pause-all">Pause all</button>
-        </div>
+        <button class="btn subtle" id="btn-more" aria-haspopup="menu" aria-expanded="false">
+          All downloads
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4.5 6.5 3.5 3.5 3.5-3.5"/></svg>
+        </button>
         <div class="spacer"></div>
         <label class="search">
           <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg>
           <input id="search" type="search" placeholder="Search" aria-label="Search downloads">
         </label>
-        <button class="btn icon" id="btn-settings" title="Settings" aria-label="Settings">
-          <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg>
+        <button class="btn icon" id="btn-settings" title="Settings (Ctrl+,)" aria-label="Settings">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5h10M3 8h10M3 11.5h10"/><path d="M6 3v3M10 6.5v3M7 10v3" stroke-width="2"/></svg>
         </button>
       </header>
+
+      <div class="banner alert" id="shutdown-banner" hidden role="alert">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v5"/><path d="M4.5 4.6a5 5 0 1 0 7 0"/></svg>
+        <span id="shutdown-text">The computer shuts down in about a minute.</span>
+        <button class="btn small" id="shutdown-cancel">Cancel shutdown</button>
+      </div>
 
       <div class="queuebar" id="queuebar" hidden>
         <strong id="qb-name"></strong>
@@ -76,36 +84,38 @@
         <label class="inline">At once
           <select id="qb-max" aria-label="Downloads at once in this queue"></select>
         </label>
+        <button class="btn" id="qb-schedule">Schedule…</button>
+        <button class="btn" id="qb-rename">Rename…</button>
+        <button class="btn danger-outline" id="qb-delete">Delete…</button>
+        <button class="btn" id="qb-stop">Stop</button>
         <button class="btn primary" id="qb-start">Start queue</button>
-        <button class="btn" id="qb-stop">Stop queue</button>
-        <button class="btn" id="qb-rename">Rename</button>
-        <button class="btn danger-outline" id="qb-delete">Delete queue</button>
       </div>
 
       <div class="banner" id="privacy-banner" hidden role="status">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5 2.5 3.5v4c0 3.3 2.3 5.9 5.5 7 3.2-1.1 5.5-3.7 5.5-7v-4z"/></svg>
         <span id="privacy-banner-text">Torrents are waiting for a VPN or proxy.</span>
-        <button class="btn small" id="privacy-banner-btn">Privacy settings</button>
+        <button class="btn small" id="privacy-banner-btn">Set up</button>
       </div>
 
-      <section class="list" aria-label="Downloads">
+      <section class="list" id="list" tabindex="0" aria-label="Downloads. Use the arrow keys to move, Enter to open, Space to pause or continue.">
         <table>
           <thead>
             <tr>
-              <th class="c-name">Name</th>
-              <th class="c-size">Size</th>
-              <th class="c-progress">Progress</th>
-              <th class="c-speed">Speed</th>
-              <th class="c-eta">Time left</th>
-              <th class="c-status">Status</th>
+              <th class="c-name" scope="col">Name</th>
+              <th class="c-size" scope="col">Size</th>
+              <th class="c-progress" scope="col">Progress</th>
+              <th class="c-speed" scope="col">Speed</th>
+              <th class="c-eta" scope="col">Time left</th>
+              <th class="c-status" scope="col">Status</th>
             </tr>
           </thead>
           <tbody id="rows"></tbody>
         </table>
         <div class="empty" id="empty">
-          <img src="brand/app-icon.png" alt="" width="48" height="48">
-          <h2>No downloads here yet</h2>
-          <p class="muted">Click <strong>Add</strong>, paste a link, or download something in your browser.</p>
+          <img src="brand/app-icon.png" alt="" width="44" height="44">
+          <h2 id="empty-title">Nothing here yet</h2>
+          <p class="muted" id="empty-text">Add a download, paste a link anywhere in this window, or download something in your browser.</p>
+          <button class="btn primary" id="empty-add">Add a download</button>
         </div>
       </section>
 
@@ -113,7 +123,7 @@
         <div class="details-head">
           <div class="details-title">
             <h2 id="d-name"></h2>
-            <span class="badge" id="d-status"></span>
+            <span id="d-status"></span>
           </div>
           <div class="details-actions">
             <button class="btn small" id="d-open">Open</button>
@@ -122,15 +132,14 @@
           </div>
         </div>
         <div class="sectionmap" id="d-map" role="img" aria-label="Sections"></div>
+        <p class="map-caption" id="d-map-caption"></p>
         <dl class="facts">
           <div><dt>Downloaded</dt><dd id="d-done"></dd></div>
           <div><dt>Speed</dt><dd id="d-speed"></dd></div>
           <div><dt>Time left</dt><dd id="d-eta"></dd></div>
-          <div id="d-sections-wrap"><dt>Sections</dt><dd>
-            <select id="d-sections" aria-label="Sections for this download"></select>
-          </dd></div>
-          <div><dt>Can continue after pausing</dt><dd id="d-resume"></dd></div>
-          <div><dt>Queue</dt><dd><select id="d-queue" aria-label="Queue for this download"></select></dd></div>
+          <div id="d-sections-wrap"><dt><label for="d-sections">Sections</label></dt><dd><select id="d-sections"></select></dd></div>
+          <div><dt><label for="d-queue">Queue</label></dt><dd><select id="d-queue"></select></dd></div>
+          <div><dt>Resume</dt><dd id="d-resume"></dd></div>
           <div class="wide"><dt>Saved to</dt><dd id="d-path" class="mono"></dd></div>
           <div class="wide"><dt>Address</dt><dd id="d-url" class="mono"></dd></div>
           <div class="wide" id="d-error-wrap" hidden><dt>Problem</dt><dd id="d-error"></dd></div>
@@ -139,6 +148,17 @@
     </main>
   </div>
 
+  <!-- Menus -->
+  <div class="menu" id="menu-more" role="menu" hidden aria-label="All downloads">
+    <button role="menuitem" id="btn-resume-all">Continue all</button>
+    <button role="menuitem" id="btn-pause-all">Pause all</button>
+    <hr>
+    <button role="menuitem" id="btn-grab">Grab files from a website…</button>
+    <hr>
+    <button role="menuitem" id="btn-clear-finished">Remove finished…</button>
+  </div>
+  <div class="menu" id="menu-row" role="menu" hidden aria-label="Download"></div>
+
   <!-- Add download -->
   <dialog id="dlg-add" aria-labelledby="add-title">
     <form method="dialog" class="dialog" id="add-form">
@@ -146,52 +166,78 @@
       <label class="field">
         <span>Address</span>
         <div class="row">
-          <input id="add-url" type="text" placeholder="https://…, a magnet link, or a video page" autocomplete="off" spellcheck="false" required>
+          <input id="add-url" type="text" placeholder="A link, a magnet link, or a video page" autocomplete="off" spellcheck="false" required>
           <button class="btn" type="button" id="add-check">Check</button>
         </div>
       </label>
       <div class="probe-info" id="add-info" hidden></div>
-      <div class="formats" id="add-formats" hidden></div>
+      <div class="formats" id="add-formats" hidden role="radiogroup" aria-label="Format"></div>
       <div class="grid2">
         <label class="field"><span>Save as</span><input id="add-name" type="text" placeholder="Name from the server"></label>
-        <label class="field"><span>Sections</span>
-          <select id="add-sections" aria-label="Sections"></select>
-        </label>
+        <label class="field"><span>Sections</span><select id="add-sections"></select></label>
       </div>
-      <label class="field"><span>Queue</span>
-        <select id="add-queue" aria-label="Queue"></select>
-      </label>
-      <label class="field">
-        <span>Folder</span>
-        <div class="row">
-          <input id="add-dir" type="text" placeholder="By category, in your download folder">
-          <button class="btn" type="button" id="add-browse">Browse…</button>
-        </div>
-      </label>
+      <div class="grid2">
+        <label class="field"><span>Folder</span>
+          <div class="row">
+            <input id="add-dir" type="text" placeholder="By category">
+            <button class="btn" type="button" id="add-browse">Browse…</button>
+          </div>
+        </label>
+        <label class="field"><span>Queue</span><select id="add-queue"></select></label>
+      </div>
       <p class="error" id="add-error" role="alert" hidden></p>
       <div class="actions">
         <button class="btn subtle" type="button" id="add-torrent">Open a .torrent file…</button>
         <span class="spacer"></span>
-        <button class="btn" type="button" value="later" id="add-later">Download later</button>
-        <button class="btn primary" type="submit" value="start" id="add-start">Start download</button>
+        <button class="btn" type="button" id="add-later">Add to list</button>
+        <button class="btn primary" type="submit" id="add-start">Start download</button>
       </div>
     </form>
   </dialog>
 
-  <!-- Downloads from the browser -->
+  <!-- Downloads from the browser, and from the site grabber -->
   <dialog id="dlg-browser" aria-labelledby="browser-title">
     <form method="dialog" class="dialog" id="browser-form">
       <h2 id="browser-title">Download from your browser</h2>
+      <div class="checklist-head"><span id="browser-count" class="muted"></span><button type="button" class="btn small subtle" id="browser-toggle">Select none</button></div>
       <ul class="checklist" id="browser-items"></ul>
       <div class="grid2">
-        <label class="field"><span>Sections</span><select id="browser-sections" aria-label="Sections"></select></label>
+        <label class="field"><span>Sections</span><select id="browser-sections"></select></label>
         <label class="field"><span>Folder</span><input id="browser-dir" type="text" placeholder="By category"></label>
       </div>
       <div class="actions">
         <span class="spacer"></span>
         <button class="btn" type="button" id="browser-cancel">Cancel</button>
-        <button class="btn" type="button" id="browser-later">Download later</button>
+        <button class="btn" type="button" id="browser-later">Add to list</button>
         <button class="btn primary" type="submit" id="browser-start">Start download</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Grab a site -->
+  <dialog id="dlg-grab" aria-labelledby="grab-title">
+    <form method="dialog" class="dialog" id="grab-form">
+      <h2 id="grab-title">Grab files from a website</h2>
+      <p class="lead">Looks through a site's pages and lists the files they link to. Nothing downloads until you choose.</p>
+      <label class="field"><span>Start page</span><input id="grab-url" type="text" placeholder="https://example.com/downloads/" spellcheck="false" required></label>
+      <div class="grid2">
+        <label class="field"><span>How deep</span>
+          <select id="grab-depth">
+            <option value="0">This page only</option>
+            <option value="1" selected>This page and pages it links to</option>
+            <option value="2">Two clicks away</option>
+            <option value="3">Three clicks away</option>
+          </select>
+        </label>
+        <label class="field"><span>File types</span><input id="grab-types" type="text" value="pdf zip mp3 mp4 exe iso" spellcheck="false"></label>
+      </div>
+      <label class="check"><input type="checkbox" id="grab-same" checked><span>Stay on this website<small>Files and pages on other sites are left out.</small></span></label>
+      <div class="summary-line" id="grab-status" role="status" hidden></div>
+      <p class="error" id="grab-error" role="alert" hidden></p>
+      <div class="actions">
+        <span class="spacer"></span>
+        <button class="btn" type="button" id="grab-cancel">Cancel</button>
+        <button class="btn primary" type="submit" id="grab-go">Find files</button>
       </div>
     </form>
   </dialog>
@@ -199,15 +245,14 @@
   <!-- Remove -->
   <dialog id="dlg-remove" aria-labelledby="remove-title">
     <form method="dialog" class="dialog narrow">
-      <h2 id="remove-title">Remove downloads</h2>
+      <h2 id="remove-title">Remove from list</h2>
       <div class="scopes" role="radiogroup" aria-label="What to remove">
         <label class="check"><input type="radio" name="scope" value="selected"> <span id="scope-selected">Selected</span></label>
         <label class="check"><input type="radio" name="scope" value="finished"> <span id="scope-finished">All finished</span></label>
         <label class="check"><input type="radio" name="scope" value="failed"> <span id="scope-failed">All failed or expired</span></label>
         <label class="check"><input type="radio" name="scope" value="view"> <span id="scope-view">Everything in this view</span></label>
       </div>
-      <p class="muted small">Removing takes downloads off the list. Unfinished parts are always deleted.</p>
-      <label class="check"><input type="checkbox" id="remove-files"> Also delete the downloaded files from the computer</label>
+      <label class="check"><input type="checkbox" id="remove-files"><span>Also delete the files from this computer<small>Unfinished parts are always deleted.</small></span></label>
       <div class="actions">
         <span class="spacer"></span>
         <button class="btn" value="cancel">Cancel</button>
@@ -220,12 +265,43 @@
   <dialog id="dlg-queue" aria-labelledby="queue-title">
     <form method="dialog" class="dialog narrow" id="queue-form">
       <h2 id="queue-title">New queue</h2>
-      <label class="field"><span>Name</span><input id="queue-name" type="text" placeholder="e.g. Tonight" required></label>
-      <label class="field"><span>Downloads at once</span><select id="queue-max" aria-label="Downloads at once"></select></label>
+      <label class="field"><span>Name</span><input id="queue-name" type="text" placeholder="Tonight" required></label>
+      <label class="field"><span>Downloads at once</span><select id="queue-max"></select></label>
       <div class="actions">
         <span class="spacer"></span>
         <button class="btn" type="button" id="queue-cancel">Cancel</button>
         <button class="btn primary" type="submit" id="queue-ok">Create</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Queue schedule -->
+  <dialog id="dlg-schedule" aria-labelledby="schedule-title">
+    <form method="dialog" class="dialog narrow" id="schedule-form">
+      <h2 id="schedule-title">Schedule</h2>
+      <label class="check"><input type="checkbox" id="sch-on"><span>Run this queue on a schedule</span></label>
+      <div class="grid2">
+        <label class="field"><span>Start at</span><input id="sch-start" type="time" value="22:00"></label>
+        <label class="field"><span>Stop at (optional)</span><input id="sch-stop" type="time"></label>
+      </div>
+      <fieldset class="field" style="border:0;padding:0;margin:0">
+        <span>On</span>
+        <div class="days" id="sch-days"></div>
+      </fieldset>
+      <label class="field"><span>When it's finished</span>
+        <select id="sch-done">
+          <option value="nothing">Do nothing</option>
+          <option value="quit">Close Layó's Download Manager</option>
+          <option value="sleep">Put the computer to sleep</option>
+          <option value="shutDown">Shut the computer down (with a minute to cancel)</option>
+        </select>
+      </label>
+      <p class="summary-line" id="sch-summary"></p>
+      <p class="error" id="sch-error" role="alert" hidden></p>
+      <div class="actions">
+        <span class="spacer"></span>
+        <button class="btn" type="button" id="sch-cancel">Cancel</button>
+        <button class="btn primary" type="submit" id="sch-save">Save</button>
       </div>
     </form>
   </dialog>
@@ -235,9 +311,9 @@
     <form method="dialog" class="dialog narrow" id="delqueue-form">
       <h2 id="delqueue-title">Delete queue</h2>
       <p class="muted" id="delqueue-text"></p>
-      <label class="check"><input type="radio" name="dq" value="keep" checked> Keep its downloads in the list</label>
-      <label class="check"><input type="radio" name="dq" value="remove"> Remove its downloads too</label>
-      <label class="check indent"><input type="checkbox" id="delqueue-files" disabled> And delete their files from the computer</label>
+      <label class="check"><input type="radio" name="dq" value="keep" checked><span>Keep its downloads in the list</span></label>
+      <label class="check"><input type="radio" name="dq" value="remove"><span>Remove its downloads too</span></label>
+      <label class="check indent"><input type="checkbox" id="delqueue-files" disabled><span>And delete their files from this computer</span></label>
       <div class="actions">
         <span class="spacer"></span>
         <button class="btn" value="cancel">Cancel</button>
@@ -250,82 +326,89 @@
   <dialog id="dlg-settings" aria-labelledby="settings-title">
     <form method="dialog" class="dialog wide" id="settings-form">
       <h2 id="settings-title">Settings</h2>
-      <div class="tabs" role="tablist">
-        <button type="button" role="tab" class="tab active" data-tab="general" aria-selected="true">General</button>
-        <button type="button" role="tab" class="tab" data-tab="connection" aria-selected="false">Connection</button>
-        <button type="button" role="tab" class="tab" data-tab="privacy" aria-selected="false">Torrents &amp; privacy</button>
-        <button type="button" role="tab" class="tab" data-tab="about" aria-selected="false">About</button>
-      </div>
-
-      <section class="tabpanel" data-panel="general">
-        <label class="field"><span>Download folder</span>
-          <div class="row"><input name="downloadDir" type="text"><button class="btn" type="button" id="set-browse">Browse…</button></div>
-        </label>
-        <label class="check"><input type="checkbox" name="categoryFolders"> Sort into Video, Music, Documents… folders</label>
-        <label class="check"><input type="checkbox" name="askForBrowserDownloads"> Ask before downloading what the browser sends</label>
-        <label class="check"><input type="checkbox" name="launchOnStartup"> Start Layó's Download Manager when I sign in to Windows</label>
-        <label class="check indent"><input type="checkbox" name="startMinimized"> Start in the tray, without opening the window</label>
-        <label class="check"><input type="checkbox" name="minimizeToTray"> Minimize to the tray</label>
-        <label class="check"><input type="checkbox" name="closeToTray"> Keep running in the tray when the window is closed</label>
-        <label class="check"><input type="checkbox" name="notifyOnComplete"> Show a notification when a download finishes</label>
-        <label class="check"><input type="checkbox" name="openTorrentFiles"> Start torrents from downloaded .torrent files</label>
-        <label class="check"><input type="checkbox" name="handleTorrentLinks"> Open magnet links and .torrent files with Layó's Download Manager</label>
-      </section>
-
-      <section class="tabpanel" data-panel="connection" hidden>
-        <label class="field"><span>Sections for new downloads</span>
-          <select name="defaultConnections" id="set-sections"></select>
-          <small class="muted">Each file is split into this many parts, downloaded at the same time. 8–16 suits most servers; some refuse more.</small>
-        </label>
-        <label class="field"><span>Speed limit for all downloads (KB/s, 0 = no limit)</span>
-          <input name="globalSpeedLimitKB" type="number" min="0" step="1">
-        </label>
-      </section>
-
-      <section class="tabpanel" data-panel="privacy" hidden>
-        <p class="lead">Peers in a torrent see the IP address your traffic comes from. These settings make sure it's your VPN's, not yours.</p>
-        <div class="modes" role="radiogroup" aria-label="Privacy mode">
-          <label class="mode"><input type="radio" name="mode" value="proxy">
-            <span><strong>Proxy</strong> <span class="badge ok">Recommended</span><br><small>All torrent traffic through your VPN provider's SOCKS5 proxy. Anything that could leak is switched off. If the proxy drops, torrents stop.</small></span></label>
-          <label class="mode"><input type="radio" name="mode" value="vpn">
-            <span><strong>VPN adapter</strong><br><small>Torrents only run while your VPN is connected, and pause the moment it drops (kill switch).</small></span></label>
-          <label class="mode"><input type="radio" name="mode" value="private">
-            <span><strong>Private, no VPN</strong><br><small>Nothing extra shared (no local network or router announcements), but peers see your real IP.</small></span></label>
-          <label class="mode"><input type="radio" name="mode" value="standard">
-            <span><strong>Standard</strong><br><small>Everything on for the most peers. Peers see your real IP.</small></span></label>
+      <div class="settings">
+        <div class="tabs" role="tablist" aria-orientation="vertical">
+          <button type="button" role="tab" class="tab active" data-tab="general" aria-selected="true">General</button>
+          <button type="button" role="tab" class="tab" data-tab="connection" aria-selected="false">Downloads</button>
+          <button type="button" role="tab" class="tab" data-tab="privacy" aria-selected="false">Torrents and privacy</button>
+          <button type="button" role="tab" class="tab" data-tab="about" aria-selected="false">About</button>
         </div>
-        <div class="mode-detail" data-for="proxy">
-          <label class="field"><span>SOCKS5 proxy</span>
-            <div class="row"><input name="proxyUrl" type="text" placeholder="10.64.0.1:1080 or socks5://user:password@host:port" spellcheck="false"><button class="btn" type="button" id="set-test-proxy">Test</button></div>
+
+        <section class="tabpanel" data-panel="general" role="tabpanel">
+          <p class="group-title">Startup</p>
+          <label class="check"><input type="checkbox" name="launchOnStartup"><span>Start when I sign in to Windows</span></label>
+          <label class="check indent"><input type="checkbox" name="startMinimized"><span>Start in the tray<small>The window stays closed until you need it.</small></span></label>
+          <p class="group-title">Window</p>
+          <label class="check"><input type="checkbox" name="minimizeToTray"><span>Minimize to the tray</span></label>
+          <label class="check"><input type="checkbox" name="closeToTray"><span>Keep running in the tray when closed<small>Downloads carry on in the background.</small></span></label>
+          <label class="check"><input type="checkbox" name="notifyOnComplete"><span>Notify me when a download finishes</span></label>
+          <p class="group-title">Browser</p>
+          <label class="check"><input type="checkbox" name="askForBrowserDownloads"><span>Ask before downloading what the browser sends</span></label>
+          <label class="check"><input type="checkbox" name="handleTorrentLinks"><span>Open magnet links and .torrent files here</span></label>
+          <label class="check"><input type="checkbox" name="openTorrentFiles"><span>Start downloaded .torrent files automatically</span></label>
+        </section>
+
+        <section class="tabpanel" data-panel="connection" role="tabpanel" hidden>
+          <label class="field"><span>Download folder</span>
+            <div class="row"><input name="downloadDir" type="text"><button class="btn" type="button" id="set-browse">Browse…</button></div>
           </label>
-        </div>
-        <div class="mode-detail" data-for="vpn">
-          <label class="field"><span>VPN network adapter</span>
-            <div class="row"><select name="vpnInterface" id="set-adapters"></select><button class="btn" type="button" id="set-refresh-adapters">Refresh</button></div>
-            <small class="muted">On Windows, also turn on your VPN app's own kill switch, or use Proxy mode for airtight protection.</small>
+          <label class="check"><input type="checkbox" name="categoryFolders"><span>Sort into Video, Music, Documents and other folders</span></label>
+          <label class="field"><span>Sections for new downloads</span>
+            <select name="defaultConnections" id="set-sections"></select>
+            <small>Each file downloads in this many parts at once. 8–16 suits most servers; some refuse more.</small>
           </label>
-        </div>
-        <label class="check" id="require-wrap"><input type="checkbox" name="requireProtection"> Never run torrents without a VPN or proxy</label>
-        <label class="check" id="dht-wrap"><input type="checkbox" name="dht"> Find peers through the DHT (needed for magnet links without trackers)</label>
-        <div class="grid2">
-          <label class="field"><span>Share until ratio (0 = stop when done)</span><input name="seedRatio" type="number" min="0" step="0.1"></label>
-          <label class="field"><span>IP blocklist (address or file, optional)</span><input name="blocklist" type="text" spellcheck="false"></label>
-        </div>
-        <div class="status-line" id="privacy-status" role="status"></div>
-      </section>
+          <label class="field"><span>Speed limit for all downloads</span>
+            <div class="row"><input name="globalSpeedLimitKB" type="number" min="0" step="1" aria-describedby="limit-help"><span class="inline muted">KB/s</span></div>
+            <small id="limit-help">0 means no limit.</small>
+          </label>
+        </section>
 
-      <section class="tabpanel" data-panel="about" hidden>
-        <div class="about">
-          <img src="brand/app-icon.png" alt="" width="56" height="56">
-          <div>
-            <h3>Layó's Download Manager</h3>
-            <p class="muted" id="about-version"></p>
-            <p>Developed by <button type="button" class="link" id="about-credit">Layó</button></p>
+        <section class="tabpanel" data-panel="privacy" role="tabpanel" hidden>
+          <p class="muted">Peers in a torrent see the IP address your traffic comes from. These settings make sure it's your VPN's, not yours.</p>
+          <div class="modes" role="radiogroup" aria-label="Privacy mode">
+            <label class="mode"><input type="radio" name="mode" value="proxy">
+              <span><strong>Proxy</strong> <span class="tag">Recommended</span><br><small>Everything goes through your VPN provider's SOCKS5 proxy. If it drops, torrents stop.</small></span></label>
+            <label class="mode"><input type="radio" name="mode" value="vpn">
+              <span><strong>VPN adapter</strong><br><small>Torrents only run while your VPN is connected, and pause the moment it drops.</small></span></label>
+            <label class="mode"><input type="radio" name="mode" value="private">
+              <span><strong>Private, no VPN</strong><br><small>Nothing extra shared, but peers see your real IP.</small></span></label>
+            <label class="mode"><input type="radio" name="mode" value="standard">
+              <span><strong>Standard</strong><br><small>Everything on for the most peers. Peers see your real IP.</small></span></label>
           </div>
-        </div>
-        <ul class="muted" id="about-tools"></ul>
-        <p class="muted small">Free and open source under the GNU GPL v3. Torrents use librqbit; video downloads use yt-dlp and ffmpeg.</p>
-      </section>
+          <div class="mode-detail" data-for="proxy">
+            <label class="field"><span>SOCKS5 proxy</span>
+              <div class="row"><input name="proxyUrl" type="text" placeholder="10.64.0.1:1080" spellcheck="false"><button class="btn" type="button" id="set-test-proxy">Test</button></div>
+              <small>Also accepts socks5://user:password@host:port</small>
+            </label>
+          </div>
+          <div class="mode-detail" data-for="vpn">
+            <label class="field"><span>VPN network adapter</span>
+              <div class="row"><select name="vpnInterface" id="set-adapters"></select><button class="btn" type="button" id="set-refresh-adapters">Refresh</button></div>
+              <small>On Windows, also turn on your VPN app's own kill switch, or use Proxy for airtight protection.</small>
+            </label>
+          </div>
+          <label class="check" id="require-wrap"><input type="checkbox" name="requireProtection"><span>Never run torrents without a VPN or proxy</span></label>
+          <label class="check" id="dht-wrap"><input type="checkbox" name="dht"><span>Find peers through the DHT<small>Needed for magnet links without trackers.</small></span></label>
+          <div class="grid2">
+            <label class="field"><span>Share until ratio</span><input name="seedRatio" type="number" min="0" step="0.1"><small>0 stops sharing as soon as it's done.</small></label>
+            <label class="field"><span>IP blocklist (optional)</span><input name="blocklist" type="text" spellcheck="false" placeholder="Address or file"></label>
+          </div>
+          <div class="status-line" id="privacy-status" role="status"></div>
+        </section>
+
+        <section class="tabpanel" data-panel="about" role="tabpanel" hidden>
+          <div class="about">
+            <img src="brand/app-icon.png" alt="" width="56" height="56">
+            <div>
+              <h3>Layó's Download Manager</h3>
+              <p class="muted" id="about-version"></p>
+              <p>Developed by <button type="button" class="link" id="about-credit">Layó</button></p>
+            </div>
+          </div>
+          <ul class="muted" id="about-tools"></ul>
+          <p class="muted small">Free and open source under the GNU GPL v3. Torrents use librqbit; video downloads use yt-dlp and ffmpeg.</p>
+        </section>
+      </div>
 
       <p class="error" id="settings-error" role="alert" hidden></p>
       <div class="actions">

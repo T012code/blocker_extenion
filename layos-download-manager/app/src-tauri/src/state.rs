@@ -113,6 +113,14 @@ impl AppState {
         });
         state.start_torrents().await;
         state.forward_events(app.clone());
+        // A scheduled queue finished: quit, sleep or shut down if it says so.
+        let mut frx = state.queues.subscribe_finished();
+        let fapp = app.clone();
+        tauri::async_runtime::spawn(async move {
+            while let Ok((queue, action)) = frx.recv().await {
+                crate::power::queue_finished(&fapp, &queue, action);
+            }
+        });
         // Queue changes go to the window too.
         let mut qrx = state.queues.subscribe();
         let qapp = app.clone();

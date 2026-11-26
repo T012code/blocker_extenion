@@ -4,7 +4,7 @@
 
 A free download manager for Windows. It speeds up downloads by fetching each file in many sections at once, resumes broken downloads, catches downloads from your browser, and grabs videos from web pages.
 
-> **Status:** in development. Done and tested: the download engine, the browser extension and bridge, the video download button, torrents with privacy protection, the desktop app with queues, and the Windows installer set-up. Next: the scheduler (start and stop queues at set times, shut down when done) and the site grabber.
+> **Status:** in development. Done and tested: the download engine, the browser extension and bridge, the video download button, torrents with privacy protection, the desktop app with queues, and the Windows installer set-up. Next: code signing and the store release of the extension.
 
 ## Installing on Windows
 
@@ -73,10 +73,13 @@ The main window lists your downloads with their progress, speed and time left. C
 - **From the browser:** downloads the extension sends can be confirmed first, and "Download all links" lets you tick which files to get.
 - **Settings:** download folder and category folders, default sections, overall speed limit, browser behaviour, the tray, notifications, and **Torrents & privacy** (mode, proxy with a Test button, VPN adapter, sharing ratio, blocklist).
 - **Queues:** create queues in the sidebar, each running a set number of downloads at once, oldest first. **Start queue** and **Stop queue** run or pause it; downloads can be added straight into a queue or moved between queues; **Delete queue** keeps its downloads in the list or removes them (and their files, if you want).
+- **Scheduler:** each queue can start and stop by itself at set times on chosen days, and then do nothing, close the app, put the computer to sleep, or shut it down (with a minute to cancel, from a banner in the window). The schedule dialog says what will happen in plain words, e.g. "Starts at 22:30 on weekdays, stops at 06:00."
+- **Site grabber** (*All downloads → Grab files from a website*): reads a site's pages to a depth you choose, stays on that site, honours its robots.txt, and lists the files of the types you want, to tick before downloading.
+- **Right-click menu and keyboard:** open, show in folder, continue, pause, move to a queue, copy the address, remove. In the list, ↑/↓ move, Shift extends the selection, Enter opens, Space pauses or continues.
 - **Removing in groups:** **Remove** clears the selection, every finished download, every failed or expired one, or everything in the current view, optionally deleting the files too.
 - **Starts with Windows** (in the tray, without opening the window) and can **minimize to the tray**; both are settings. Closing the window keeps it running in the tray, where you can pause or continue everything.
 - **Magnet links and .torrent files** anywhere in Windows open in the app (a setting; turning it off removes the association).
-- Light and dark follow Windows. There are no pill-shaped controls: buttons, labels and toggles are rectangles, and a test checks every element on screen for it. *Developed by Layó* in the corner links to [layothedeveloper.com](https://layothedeveloper.com).
+- Light and dark follow Windows. There are no pill-shaped controls: buttons, labels and toggles are rectangles, and a test checks every element on screen for it. The interface follows a written design audit ([docs/design-audit.md](docs/design-audit.md)) with [before and after screenshots](docs/screenshots/README.md). *Developed by Layó* in the corner links to [layothedeveloper.com](https://layothedeveloper.com).
 
 ## Download button on videos
 

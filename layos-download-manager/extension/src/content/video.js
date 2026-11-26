@@ -26,51 +26,61 @@
   const root = host.attachShadow({ mode: 'open' });
   root.innerHTML = `
 <style>
-  :host { all: initial; }
+:host {
+    all: initial;
+    --accent: oklch(55.5% 0.215 263); --accent-strong: oklch(47% 0.22 265); --accent-ink: oklch(99% 0.004 250);
+    --card: oklch(100% 0 0); --ink: oklch(22% 0.045 266); --ink-muted: oklch(45% 0.03 262);
+    --surface: oklch(95.6% 0.016 250); --rule: oklch(22% 0.045 266 / 0.1); --focus: oklch(89% 0.19 125);
+    --success: oklch(50% 0.13 155); --danger: oklch(52% 0.19 25); --tag-bg: oklch(93.5% 0.038 255);
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  @media (prefers-color-scheme: dark) {
+    :host {
+      --card: oklch(19.5% 0.035 266); --ink: oklch(96% 0.01 250); --ink-muted: oklch(76% 0.03 255);
+      --surface: oklch(25.5% 0.045 266); --rule: oklch(96% 0.01 250 / 0.1);
+      --success: oklch(76% 0.14 155); --danger: oklch(72% 0.16 25); --tag-bg: oklch(28% 0.075 263);
+    }
+  }
   * { box-sizing: border-box; font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif; }
   .wrap { position: fixed; display: none; flex-direction: column; align-items: flex-end; gap: 6px; pointer-events: auto; }
   .wrap.show { display: flex; }
   .btn {
     display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px 0 10px;
     border: 0; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; letter-spacing: .01em;
-    color: #fafcfe; background: #2866ee; box-shadow: 0 2px 10px rgb(17 26 47 / .35);
-    transition: background-color 160ms, transform 160ms;
+    color: var(--accent-ink); background: var(--accent); box-shadow: 0 1px 2px rgb(0 0 0 / .25), 0 4px 12px rgb(0 0 0 / .2);
+    transition: background-color 120ms var(--ease-out), transform 120ms var(--ease-out);
   }
-  .btn:hover { background: #1b47d3; }
+  .btn:hover { background: var(--accent-strong); }
   .btn:active { transform: scale(.97); }
-  .btn:focus-visible, .item:focus-visible { outline: 2px solid #bef050; outline-offset: 2px; }
+  .btn:focus-visible, .item:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
   .btn svg { width: 16px; height: 16px; }
   .menu {
     display: none; width: 300px; max-height: 360px; overflow: auto; padding: 6px;
-    border-radius: 10px; background: #ffffff; color: #111a2f; border: 1px solid rgb(17 26 47 / .1);
-    box-shadow: 0 2px 6px rgb(17 26 47 / .08), 0 24px 60px -20px rgb(40 102 238 / .45); font-size: 13px;
+    border-radius: 10px; background: var(--card); color: var(--ink); border: 1px solid var(--rule);
+    box-shadow: 0 2px 6px rgb(0 0 0 / .1), 0 16px 40px -12px rgb(0 0 0 / .35); font-size: 13px; transform-origin: top right; animation: menu-in 160ms var(--ease-out);
   }
   .menu.open { display: block; }
   .head { padding: 8px 10px 6px; font-weight: 650; font-size: 13px; }
-  .title { padding: 0 10px 8px; color: #545e6f; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .group { padding: 8px 10px 4px; color: #545e6f; font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: .06em; }
+  .title { padding: 0 10px 8px; color: var(--ink-muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .group { padding: 8px 10px 4px; color: var(--ink-muted); font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: .06em; }
   .item {
     width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px;
     padding: 8px 10px; border: 0; border-radius: 6px; background: transparent; color: inherit;
     font-size: 13px; text-align: left; cursor: pointer;
   }
-  .item:hover:not(:disabled) { background: #e9f2fb; }
-  .item:disabled { cursor: default; color: #545e6f; }
-  .item .size { color: #545e6f; font-size: 12px; white-space: nowrap; }
-  .tag { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; background: #d9ebff; color: #1b47d3; margin-left: 6px; }
-  .note { padding: 8px 10px; color: #545e6f; font-size: 12px; }
-  .note.ok { color: #14874e; font-weight: 600; }
-  .note.bad { color: #c92f33; }
-  .foot { padding: 6px 10px 4px; color: #545e6f; font-size: 11px; border-top: 1px solid rgb(17 26 47 / .08); margin-top: 4px; }
-  @media (prefers-color-scheme: dark) {
-    .menu { background: #0d1425; color: #edf2f8; border-color: rgb(237 242 248 / .1); }
-    .title, .group, .item .size, .note, .foot, .item:disabled { color: #9eacbe; }
-    .item:hover:not(:disabled) { background: #192239; }
-    .tag { background: #14274d; color: #78c6ff; }
-    .note.ok { color: #5ccb89; } .note.bad { color: #f97770; }
-    .foot { border-top-color: rgb(237 242 248 / .1); }
-  }
-  @media (prefers-reduced-motion: reduce) { .btn { transition: none; } }
+  .item:hover:not(:disabled) { background: var(--surface); }
+  .item:disabled { cursor: default; color: var(--ink-muted); }
+  .item .size { color: var(--ink-muted); font-size: 12px; white-space: nowrap; }
+  .tag { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; background: var(--tag-bg); color: var(--accent); margin-left: 6px; }
+  .note { padding: 8px 10px; color: var(--ink-muted); font-size: 12px; }
+  .note.ok { color: var(--success); font-weight: 600; }
+  .note.bad { color: var(--danger); }
+  .foot { padding: 6px 10px 4px; color: var(--ink-muted); font-size: 11px; border-top: 1px solid var(--rule); margin-top: 4px; }
+  @keyframes menu-in { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }
+  /* Small players: just the icon, so it doesn't cover the player's own controls. */
+  .wrap.compact .btn { width: 32px; padding: 0; justify-content: center; }
+  .wrap.compact .btn span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  @media (prefers-reduced-motion: reduce) { .btn, .menu { transition: none; animation: none; } }
 </style>
 <div class="wrap" part="wrap">
   <button class="btn" type="button" aria-haspopup="menu" aria-expanded="false">
@@ -116,6 +126,7 @@
     wrap.style.top = `${top}px`;
     wrap.style.right = `${right}px`;
     wrap.style.left = 'auto';
+    wrap.classList.toggle('compact', r.width < 360);
   }
 
   function show(video) {

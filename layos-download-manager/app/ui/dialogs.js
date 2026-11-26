@@ -34,6 +34,7 @@ export function openAdd({ url = '' } = {}) {
   );
   // Adding while looking at a queue puts it in that queue.
   $('add-queue').value = currentQueue() ? String(currentQueue().id) : '';
+  syncAddButtons();
   $('dlg-add').showModal();
   $('add-url').focus();
   if (url) check();
@@ -65,7 +66,8 @@ async function check() {
   }
   $('add-sections').disabled = false;
   $('add-check').disabled = true;
-  $('add-check').textContent = 'Checking…';
+  $('add-check').classList.add('busy');
+  $('add-check').setAttribute('aria-label', 'Checking');
   try {
     if (looksLikeFile(url)) {
       const p = await invoke('probe', { url });
@@ -83,7 +85,8 @@ async function check() {
     showError($('add-error'), `Couldn't check the address: ${e?.message ?? e}`);
   } finally {
     $('add-check').disabled = false;
-    $('add-check').textContent = 'Check';
+    $('add-check').classList.remove('busy');
+    $('add-check').removeAttribute('aria-label');
   }
 }
 
@@ -153,10 +156,24 @@ async function submitAdd(start) {
 
 let browserItems = [];
 
-function openBrowser({ items, source }) {
+function syncBrowserCount() {
+  const boxes = [...$('browser-items').querySelectorAll('input')];
+  const n = boxes.filter((b) => b.checked).length;
+  const note = $('browser-count').dataset.note;
+  $('browser-count').textContent = `${n} of ${boxes.length} selected${note ? ` · ${note}` : ''}`;
+  $('browser-toggle').textContent = n === boxes.length ? 'Select none' : 'Select all';
+  $('browser-start').disabled = n === 0;
+  $('browser-later').disabled = n === 0;
+}
+
+let browserQueue = null;
+
+function openBrowser({ items, source, title, note, queueId = null }) {
   browserItems = items;
+  browserQueue = queueId;
   const several = items.length > 1;
-  $('browser-title').textContent = several ? `Download ${items.length} files from your browser` : 'Download from your browser';
+  $('browser-title').textContent = title ?? (several ? `Download ${items.length} files from your browser` : 'Download from your browser');
+  $('browser-count').dataset.note = note ?? '';
   $('browser-items').replaceChildren(...items.map((it, i) => {
     const li = document.createElement('li');
     const l = document.createElement('label');
@@ -176,6 +193,7 @@ function openBrowser({ items, source }) {
     return li;
   }));
   run(invoke('get_settings'), '').then((s) => fillSectionSelect($('browser-sections'), s?.defaultConnections ?? 8));
+  syncBrowserCount();
   $('browser-dir').value = '';
   void source;
   $('dlg-browser').showModal();
@@ -189,6 +207,7 @@ async function submitBrowser(start) {
         url: it.url, fileName: it.fileName ?? null, referer: it.referer ?? null, cookies: it.cookies ?? null,
         userAgent: it.userAgent ?? null, description: it.description ?? null, media: it.media ?? null,
         saveDir: $('browser-dir').value.trim() || null, connections: Number($('browser-sections').value) || null, start,
+        queueId: browserQueue,
       },
     }), 'Couldn\'t add a download');
   }
@@ -201,7 +220,7 @@ async function submitBrowser(start) {
 let removeScopes = {};
 
 /** Remove downloads: the selection, everything finished, everything failed, or the whole view. */
-export function openRemove(selection) {
+export function openRemove(selection, preset = null) {
   const all = allDownloads();
   removeScopes = {
     selected: selection,
@@ -217,7 +236,7 @@ export function openRemove(selection) {
   for (const r of $('dlg-remove').querySelectorAll('input[name="scope"]')) {
     r.disabled = removeScopes[r.value].length === 0;
   }
-  const first = ['selected', 'finished', 'failed', 'view'].find((k) => removeScopes[k].length);
+  const first = [preset, 'selected', 'finished', 'failed', 'view'].find((k) => k && removeScopes[k].length);
   if (!first) return toast('Nothing to remove');
   $('dlg-remove').querySelector(`input[name="scope"][value="${first}"]`).checked = true;
   $('remove-files').checked = false;
@@ -293,7 +312,7 @@ async function refreshPrivacyStatus() {
   const why = await invoke('privacy_status').catch(() => null);
   const line = $('privacy-status');
   line.replaceChildren(Object.assign(document.createElement('span'), {
-    className: `badge ${why ? 'warn' : 'ok'}`,
+    className: `status ${why ? 's-blocked' : 's-completed'}`,
     textContent: why ? 'Torrents waiting' : 'Protected',
   }), ` ${why ?? 'Torrents can run with these settings.'}`);
 }
@@ -405,7 +424,32 @@ export function initDialogs() {
   $('add-form').addEventListener('submit', (e) => { e.preventDefault(); submitAdd(true); });
   $('add-later').addEventListener('click', () => submitAdd(false));
 
+  // Add: label follows the queue picker
+  $('add-queue').addEventListener('change', syncAddButtons);
+
+  // Schedule
+  $('schedule-form').addEventListener('input', syncSchedule);
+  $('schedule-form').addEventListener('change', syncSchedule);
+  $('schedule-form').addEventListener('submit', (e) => { e.preventDefault(); saveSchedule(); });
+  $('sch-cancel').addEventListener('click', () => $('dlg-schedule').close());
+
+  // Grab a site
+  $('grab-form').addEventListener('submit', (e) => { e.preventDefault(); runGrab(); });
+  $('grab-cancel').addEventListener('click', () => $('dlg-grab').close());
+
+  // Every dialog closes on a click outside it (on the dimmed backdrop).
+  for (const d of document.querySelectorAll('dialog')) {
+    d.addEventListener('mousedown', (e) => { if (e.target === d) d.close('cancel'); });
+  }
+
   // Browser
+  $('browser-items').addEventListener('change', syncBrowserCount);
+  $('browser-toggle').addEventListener('click', () => {
+    const boxes = [...$('browser-items').querySelectorAll('input')];
+    const all = boxes.every((b) => b.checked);
+    for (const b of boxes) b.checked = !all;
+    syncBrowserCount();
+  });
   $('browser-form').addEventListener('submit', (e) => { e.preventDefault(); submitBrowser(true); });
   $('browser-later').addEventListener('click', () => submitBrowser(false));
   $('browser-cancel').addEventListener('click', () => $('dlg-browser').close());
@@ -460,12 +504,132 @@ export function initDialogs() {
     line.textContent = 'Testing the proxy…';
     try {
       await invoke('test_proxy', { url });
-      line.replaceChildren(Object.assign(document.createElement('span'), { className: 'badge ok', textContent: 'Proxy works' }), ' It answered as a SOCKS5 proxy.');
+      line.replaceChildren(Object.assign(document.createElement('span'), { className: 'status s-completed', textContent: 'Proxy works' }), ' It answered as a SOCKS5 proxy.');
     } catch (e) {
-      line.replaceChildren(Object.assign(document.createElement('span'), { className: 'badge bad', textContent: 'Not reachable' }), ` ${e?.message ?? e}`);
+      line.replaceChildren(Object.assign(document.createElement('span'), { className: 'status s-failed', textContent: 'Not reachable' }), ` ${e?.message ?? e}`);
     }
   });
   $('settings-form').addEventListener('submit', (e) => { e.preventDefault(); saveSettings(); });
   $('settings-cancel').addEventListener('click', () => $('dlg-settings').close());
   $('about-credit').addEventListener('click', () => run(invoke('open_portfolio'), 'Couldn\'t open the link'));
+}
+
+/** "Add to list" or "Add to queue", depending on the queue picked. */
+function syncAddButtons() {
+  const inQueue = !!$('add-queue').value;
+  $('add-later').textContent = inQueue ? 'Add to queue' : 'Add to list';
+  $('add-start').hidden = inQueue;
+}
+
+// ---------------------------------------------------------------- schedule
+
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+let schedulingQueue = null;
+
+function scheduleFromForm() {
+  const days = [...$('sch-days').querySelectorAll('input:checked')].map((c) => Number(c.value));
+  return {
+    start: $('sch-start').value || null,
+    stop: $('sch-stop').value || null,
+    days: days.length === 7 ? [] : days,
+    whenDone: $('sch-done').value,
+  };
+}
+
+function describeSchedule(sch) {
+  if (!$('sch-on').checked) return 'Runs only when you start it.';
+  const days = sch.days.length === 0 ? 'every day'
+    : sch.days.join() === '0,1,2,3,4' ? 'on weekdays'
+      : sch.days.join() === '5,6' ? 'at weekends'
+        : `on ${sch.days.map((d) => DAYS[d]).join(', ')}`;
+  const done = { nothing: '', quit: ' When it\'s done, the app closes.', sleep: ' When it\'s done, the computer sleeps.', shutDown: ' When it\'s done, the computer shuts down after a minute.' }[sch.whenDone];
+  if (!sch.start) return `Not scheduled to start.${done}`;
+  return `Starts at ${sch.start} ${days}${sch.stop ? `, stops at ${sch.stop}` : ''}.${done}`;
+}
+
+function syncSchedule() {
+  const on = $('sch-on').checked;
+  for (const el of $('schedule-form').querySelectorAll('#sch-start, #sch-stop, #sch-days input, #sch-done')) el.disabled = !on;
+  $('sch-summary').textContent = describeSchedule(scheduleFromForm());
+}
+
+export function openSchedule(q) {
+  schedulingQueue = q;
+  const s = q.schedule;
+  $('schedule-title').textContent = `Schedule "${q.name}"`;
+  $('sch-on').checked = !!s;
+  $('sch-start').value = s?.start ?? '22:00';
+  $('sch-stop').value = s?.stop ?? '';
+  $('sch-done').value = s?.whenDone ?? 'nothing';
+  $('sch-days').replaceChildren(...DAYS.map((d, i) => {
+    const l = document.createElement('label');
+    const c = Object.assign(document.createElement('input'), { type: 'checkbox', value: String(i) });
+    c.checked = !s || s.days.length === 0 || s.days.includes(i);
+    c.setAttribute('aria-label', ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][i]);
+    l.append(c, Object.assign(document.createElement('span'), { textContent: d }));
+    return l;
+  }));
+  showError($('sch-error'), '');
+  syncSchedule();
+  $('dlg-schedule').showModal();
+}
+
+async function saveSchedule() {
+  const sch = scheduleFromForm();
+  if ($('sch-on').checked && !sch.start && !sch.stop) return showError($('sch-error'), 'Choose a start or stop time.');
+  if ($('sch-on').checked && $('sch-days').querySelectorAll('input:checked').length === 0) return showError($('sch-error'), 'Choose at least one day.');
+  try {
+    await invoke('queue_schedule', { id: schedulingQueue.id, schedule: $('sch-on').checked ? sch : null });
+    $('dlg-schedule').close();
+    toast($('sch-on').checked ? describeSchedule(sch) : 'Schedule turned off');
+  } catch (e) {
+    showError($('sch-error'), String(e?.message ?? e));
+  }
+}
+
+// ---------------------------------------------------------------- grab a site
+
+export function openGrab() {
+  $('grab-form').reset();
+  $('grab-status').hidden = true;
+  showError($('grab-error'), '');
+  $('dlg-grab').showModal();
+  $('grab-url').focus();
+}
+
+async function runGrab() {
+  const url = $('grab-url').value.trim();
+  const types = $('grab-types').value.split(/[\s,;]+/).map((t) => t.replace(/^\./, '')).filter(Boolean);
+  if (!url) return showError($('grab-error'), 'Enter the page to start from.');
+  if (!types.length) return showError($('grab-error'), 'Enter at least one file type.');
+  showError($('grab-error'), '');
+  $('grab-go').disabled = true;
+  $('grab-go').classList.add('busy');
+  $('grab-status').hidden = false;
+  $('grab-status').textContent = 'Reading the site…';
+  try {
+    const r = await invoke('grab_site', { options: { startUrl: url, depth: Number($('grab-depth').value), fileTypes: types, sameSite: $('grab-same').checked, maxPages: 150 } });
+    if (!r.files.length) {
+      $('grab-status').textContent = `No ${types.join(', ')} files found on ${r.pagesRead} page${r.pagesRead === 1 ? '' : 's'}.`;
+      return;
+    }
+    $('dlg-grab').close();
+    const note = [`${r.pagesRead} page${r.pagesRead === 1 ? '' : 's'} read`];
+    if (r.pagesSkippedByRobots) note.push(`${r.pagesSkippedByRobots} left out at the site's request`);
+    if (r.stoppedEarly) note.push('stopped at 150 pages');
+    openBrowser({
+      items: r.files.map((f) => ({ url: f.url, fileName: f.fileName, referer: f.pageUrl })),
+      source: 'allLinks',
+      title: `${r.files.length} file${r.files.length === 1 ? '' : 's'} found`,
+      note: note.join(' · '),
+      // Grabbing from a queue's view adds the files to that queue, like Add does.
+      queueId: currentQueue()?.id ?? null,
+    });
+  } catch (e) {
+    showError($('grab-error'), String(e?.message ?? e));
+    $('grab-status').hidden = true;
+  } finally {
+    $('grab-go').disabled = false;
+    $('grab-go').classList.remove('busy');
+  }
 }

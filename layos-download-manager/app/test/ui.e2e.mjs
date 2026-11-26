@@ -49,9 +49,9 @@ try {
 
       // Pause and continue from the toolbar.
       await page.click('#btn-pause');
-      await page.locator('#rows tr', { hasText: 'ubuntu' }).locator('.badge', { hasText: 'Paused' }).waitFor();
+      await page.locator('#rows tr', { hasText: 'ubuntu' }).locator('.status', { hasText: 'Paused' }).waitFor();
       await page.click('#btn-resume');
-      await page.locator('#rows tr', { hasText: 'ubuntu' }).locator('.badge', { hasText: 'Downloading' }).waitFor();
+      await page.locator('#rows tr', { hasText: 'ubuntu' }).locator('.status', { hasText: 'Downloading' }).waitFor();
       console.log('ok - Pause and Continue work from the toolbar');
 
       // Torrent waits for a VPN by default; the banner says so.
@@ -89,7 +89,7 @@ try {
       if (shots) await page.screenshot({ path: join(shots, 'app-privacy.png') });
       await page.click('#settings-save');
       await page.locator('#privacy-banner[hidden]').waitFor({ state: 'attached' });
-      await page.locator('#rows tr', { hasText: 'Big Buck Bunny' }).locator('.badge', { hasText: 'Downloading' }).waitFor();
+      await page.locator('#rows tr', { hasText: 'Big Buck Bunny' }).locator('.status', { hasText: 'Downloading' }).waitFor();
       console.log('ok - choosing Proxy mode in Settings lets the waiting torrent start');
 
       // Downloads sent from the browser ask first.
@@ -130,10 +130,10 @@ try {
       await page.fill('#add-url', 'https://mirror.example.org/archive.zip');
       await page.click('#add-start');
       const row = page.locator('#rows tr', { hasText: 'archive.zip' });
-      await row.locator('.badge', { hasText: 'Waiting' }).waitFor();
+      await row.locator('.status', { hasText: 'Waiting' }).waitFor();
       console.log('ok - a download added to a stopped queue waits');
       await page.click('#qb-start');
-      await row.locator('.badge', { hasText: 'Downloading' }).waitFor();
+      await row.locator('.status', { hasText: 'Downloading' }).waitFor();
       await page.locator('#qb-state', { hasText: 'Running' }).waitFor();
       // The bars above the list keep their own height; the list gets the rest.
       const bannerH = await page.locator('#privacy-banner').evaluate((e) => e.getBoundingClientRect().height);
@@ -141,7 +141,7 @@ try {
       if (shots) await page.screenshot({ path: join(shots, 'app-queue.png') });
       console.log('ok - Start queue starts its downloads');
       await page.click('#qb-stop');
-      await row.locator('.badge', { hasText: 'Paused' }).waitFor();
+      await row.locator('.status', { hasText: 'Paused' }).waitFor();
       console.log('ok - Stop queue pauses them');
       await page.click('#qb-delete');
       await page.click('#delqueue-ok');
@@ -171,6 +171,55 @@ try {
       assert.equal(saved.minimizeToTray, true);
       assert.equal(saved.launchOnStartup, false);
       console.log('ok - "Start with Windows" and "Minimize to the tray" are saved');
+
+      // Keyboard: the list moves with the arrow keys; Space pauses or continues.
+      await page.click('.nav-item[data-filter="all"]');
+      await page.locator('#rows tr').first().click();
+      await page.keyboard.press('ArrowDown');
+      await page.waitForFunction(() => document.querySelector('#rows tr:nth-child(2)')?.classList.contains('selected'));
+      console.log('ok - arrow keys move the selection in the list');
+
+      // Right-click menu.
+      await page.locator('#rows tr').first().click({ button: 'right' });
+      await page.locator('#menu-row:not([hidden])').waitFor();
+      const items = await page.locator('#menu-row button').allTextContents();
+      assert.ok(items.some((t) => t.startsWith('Remove')) && items.some((t) => t.startsWith('Copy address')), items.join(' | '));
+      if (shots) await page.screenshot({ path: join(shots, 'app-context-menu.png') });
+      await page.keyboard.press('Escape');
+      await page.locator('#menu-row[hidden]').waitFor({ state: 'attached' });
+      console.log(`ok - right-click shows: ${items.map((t) => t.replace(/(Ctrl\+.|Del|Enter)$/, '')).join(' | ')}`);
+
+      // Scheduler.
+      await page.click('#btn-new-queue');
+      await page.fill('#queue-name', 'Overnight');
+      await page.click('#queue-ok');
+      await page.locator('#queue-nav .nav-item', { hasText: 'Overnight' }).click();
+      await page.click('#qb-schedule');
+      await page.check('#sch-on');
+      await page.fill('#sch-start', '22:30');
+      await page.fill('#sch-stop', '06:00');
+      for (const d of ['Saturday', 'Sunday']) await page.getByRole('checkbox', { name: d }).uncheck();
+      await page.selectOption('#sch-done', 'sleep');
+      await page.locator('#sch-summary', { hasText: 'Starts at 22:30 on weekdays, stops at 06:00. When it\'s done, the computer sleeps.' }).waitFor();
+      if (shots) await page.screenshot({ path: join(shots, 'app-schedule.png') });
+      await page.click('#sch-save');
+      await page.locator('#qb-state', { hasText: 'starts at 22:30' }).waitFor();
+      console.log('ok - a queue can be scheduled, and the summary says what will happen in plain words');
+
+      // Site grabber.
+      await page.click('#btn-more');
+      await page.click('#btn-grab');
+      await page.fill('#grab-url', 'https://example.org/downloads/');
+      await page.fill('#grab-types', 'pdf zip');
+      await page.click('#grab-go');
+      await page.locator('#dlg-browser[open]').waitFor();
+      await page.locator('#browser-count', { hasText: '3 of 3 selected · 12 pages read · 1 left out at the site\'s request' }).waitFor();
+      if (shots) await page.screenshot({ path: join(shots, 'app-grab-results.png') });
+      await page.click('#browser-toggle');
+      await page.locator('#browser-items input').first().check();
+      await page.click('#browser-start');
+      await page.locator('#rows tr', { hasText: 'annual-report-2026.pdf' }).waitFor();
+      console.log('ok - the site grabber lists matching files and downloads the ones picked');
     } else {
       await page.locator('#rows tr', { hasText: 'keynote' }).click();
       await page.waitForTimeout(400);

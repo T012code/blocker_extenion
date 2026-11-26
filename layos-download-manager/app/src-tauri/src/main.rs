@@ -3,6 +3,7 @@
 
 mod associations;
 mod commands;
+mod power;
 mod settings;
 mod state;
 mod tray;
@@ -173,6 +174,9 @@ fn main() {
             commands::queue_stop,
             commands::queue_delete,
             commands::set_queue,
+            commands::queue_schedule,
+            commands::grab_site,
+            commands::cancel_shutdown,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Layó's Download Manager");

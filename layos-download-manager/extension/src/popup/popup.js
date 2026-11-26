@@ -101,7 +101,7 @@ function row(d) {
   if (pct != null) bar.setAttribute('aria-valuenow', String(pct));
   bar.setAttribute('aria-label', `${d.fileName} progress`);
   const fill = document.createElement('span');
-  fill.style.width = `${d.status === 'completed' ? 100 : pct ?? 0}%`;
+  fill.style.setProperty('--p', String((d.status === 'completed' ? 100 : pct ?? 0) / 100));
   bar.append(fill);
 
   const meta = document.createElement('div');

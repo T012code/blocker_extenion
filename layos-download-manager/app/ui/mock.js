@@ -203,6 +203,20 @@ export async function invoke(cmd, args) {
       }
       emitQueues(); return null;
     }
+    case 'queue_schedule': {
+      const q = queues.find((x) => x.id === args.id);
+      q.schedule = args.schedule;
+      emitQueues(); return q;
+    }
+    case 'grab_site': {
+      await new Promise((r) => setTimeout(r, 400));
+      const site = new URL(args.options.startUrl).origin;
+      const files = ['annual-report-2026.pdf', 'brand-assets.zip', 'product-tour.mp4', 'price-list.pdf', 'setup-1.4.2.exe']
+        .filter((f) => args.options.fileTypes.includes(f.split('.').pop()))
+        .map((f) => ({ url: `${site}/files/${f}`, fileName: f, pageUrl: `${site}/downloads/` }));
+      return { files, pagesRead: 12, pagesSkippedByRobots: 1, stoppedEarly: false };
+    }
+    case 'cancel_shutdown': return null;
     case 'set_queue':
       for (const id of args.ids) { const d = downloads.get(id); if (d) update(d, { queueId: args.queueId }); }
       return null;
