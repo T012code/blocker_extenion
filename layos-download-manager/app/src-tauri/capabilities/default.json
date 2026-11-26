@@ -1,10 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "What the main window may do.",
-  "windows": ["main"],
+  "description": "What the app's windows may do: the main window, each download's window and the mini window.",
+  "windows": ["main", "mini", "dl-*"],
   "permissions": [
     "core:default",
+    "core:window:allow-start-dragging",
     "dialog:allow-open",
     "notification:default"
   ]

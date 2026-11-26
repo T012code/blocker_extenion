@@ -2,9 +2,18 @@
 
 import { invoke, listen, pick } from './backend.js';
 import { bytes } from './format.js';
+import { icon } from './icons.js';
 import { allDownloads, currentQueue, fillSectionSelect, info, queues, run, toast, viewDownloads } from './app.js';
 
 const $ = (id) => document.getElementById(id);
+
+/** A status word with its icon, in the same colours as the list. */
+function badge(tone, ico, text) {
+  const s = document.createElement('span');
+  s.className = `status tone-${tone} changed`;
+  s.append(icon(ico), Object.assign(document.createElement('span'), { textContent: text }));
+  return s;
+}
 
 function showError(el, text) {
   el.textContent = text ?? '';
@@ -311,10 +320,8 @@ async function loadAdapters(selectedName) {
 async function refreshPrivacyStatus() {
   const why = await invoke('privacy_status').catch(() => null);
   const line = $('privacy-status');
-  line.replaceChildren(Object.assign(document.createElement('span'), {
-    className: `status ${why ? 's-blocked' : 's-completed'}`,
-    textContent: why ? 'Torrents waiting' : 'Protected',
-  }), ` ${why ?? 'Torrents can run with these settings.'}`);
+  line.replaceChildren(why ? badge('held', 'vpn', 'Torrents waiting') : badge('good', 'done', 'Protected'),
+    ` ${why ?? 'Torrents can run with these settings.'}`);
 }
 
 export async function openSettings(tab = 'general') {
@@ -330,6 +337,9 @@ export async function openSettings(tab = 'general') {
   f.startMinimized.checked = current.startMinimized;
   f.startMinimized.disabled = !current.launchOnStartup;
   f.notifyOnComplete.checked = current.notifyOnComplete;
+  f.showProgressWindow.checked = current.showProgressWindow ?? true;
+  f.showCompleteWindow.checked = current.showCompleteWindow ?? true;
+  f.showMiniWindow.checked = current.showMiniWindow ?? true;
   f.openTorrentFiles.checked = current.openTorrentFiles;
   f.handleTorrentLinks.checked = current.handleTorrentLinks;
   fillSectionSelect($('set-sections'), current.defaultConnections);
@@ -370,6 +380,9 @@ function readSettings() {
     launchOnStartup: f.launchOnStartup.checked,
     startMinimized: f.startMinimized.checked,
     notifyOnComplete: f.notifyOnComplete.checked,
+    showProgressWindow: f.showProgressWindow.checked,
+    showCompleteWindow: f.showCompleteWindow.checked,
+    showMiniWindow: f.showMiniWindow.checked,
     openTorrentFiles: f.openTorrentFiles.checked,
     handleTorrentLinks: f.handleTorrentLinks.checked,
     defaultConnections: Number($('set-sections').value),
@@ -504,9 +517,9 @@ export function initDialogs() {
     line.textContent = 'Testing the proxy…';
     try {
       await invoke('test_proxy', { url });
-      line.replaceChildren(Object.assign(document.createElement('span'), { className: 'status s-completed', textContent: 'Proxy works' }), ' It answered as a SOCKS5 proxy.');
+      line.replaceChildren(badge('good', 'done', 'Proxy works'), ' It answered as a SOCKS5 proxy.');
     } catch (e) {
-      line.replaceChildren(Object.assign(document.createElement('span'), { className: 'status s-failed', textContent: 'Not reachable' }), ` ${e?.message ?? e}`);
+      line.replaceChildren(badge('bad', 'failed', 'Not reachable'), ` ${e?.message ?? e}`);
     }
   });
   $('settings-form').addEventListener('submit', (e) => { e.preventDefault(); saveSettings(); });

@@ -29,6 +29,12 @@ pub struct AppSettings {
     /// When started with Windows, stay in the tray instead of opening the window.
     pub start_minimized: bool,
     pub notify_on_complete: bool,
+    /// Open a small window for each download when it starts (not for queued ones).
+    pub show_progress_window: bool,
+    /// Open that window again, with Open and Show in folder, when the download finishes.
+    pub show_complete_window: bool,
+    /// Show the mini window, above other windows, while anything downloads.
+    pub show_mini_window: bool,
     /// Start torrents from downloaded .torrent files.
     pub open_torrent_files: bool,
     /// Open magnet links and .torrent files from anywhere in Windows with this app.
@@ -51,6 +57,9 @@ impl Default for AppSettings {
             launch_on_startup: true,
             start_minimized: true,
             notify_on_complete: true,
+            show_progress_window: true,
+            show_complete_window: true,
+            show_mini_window: true,
             open_torrent_files: true,
             handle_torrent_links: true,
             seed_ratio: 1.0,

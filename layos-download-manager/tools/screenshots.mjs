@@ -127,6 +127,69 @@ for (const scheme of ['light', 'dark']) {
   await shot(page, 'app-empty');
   await page.close();
 }
+
+// Columns, folding, a long list, and the small windows.
+{
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 });
+  await page.goto(`${base}/index.html?mock&many=150`);
+  await page.locator('#rows tr').nth(150).waitFor({ state: 'attached' });
+  await page.waitForTimeout(1200);
+  await shot(page, 'app-long-list');
+  await page.click('#btn-columns');
+  await page.waitForTimeout(300);
+  await shot(page, 'app-columns-menu');
+  for (const label of ['Downloaded', 'Added', 'Finished', 'Sections', 'Queue', 'Address']) {
+    await page.locator('#menu-columns button', { hasText: label }).click();
+  }
+  await page.keyboard.press('Escape');
+  await page.click('th[data-key="size"] .th-button');
+  await page.click('th[data-key="size"] .th-button');
+  await page.evaluate(() => { document.getElementById('list').scrollLeft = 520; });
+  await page.waitForTimeout(500);
+  await shot(page, 'app-columns-sorted');
+  await page.keyboard.press('Control+b');
+  await page.keyboard.press('Control+j');
+  await page.evaluate(() => { document.getElementById('list').scrollLeft = 0; });
+  await page.waitForTimeout(600);
+  await shot(page, 'app-folded');
+  await page.close();
+}
+for (const scheme of ['light', 'dark']) {
+  const win = await browser.newPage({ viewport: { width: 460, height: 302 }, colorScheme: scheme, deviceScaleFactor: 2 });
+  await win.goto(`${base}/progress.html?mock&id=1`);
+  await win.locator('#sections', { hasText: 'of 16' }).waitFor();
+  await win.waitForTimeout(1500);
+  const fit = async () => win.setViewportSize({ width: 460, height: Math.ceil(await win.evaluate(() => document.getElementById('win').getBoundingClientRect().height)) });
+  await fit();
+  await shot(win, `window-progress-${scheme}`);
+  await win.click('#toggle');
+  await fit();
+  await win.waitForTimeout(400);
+  await shot(win, `window-progress-compact-${scheme}`);
+  await win.click('#toggle');
+  await win.goto(`${base}/progress.html?mock&id=4`);
+  await win.locator('#done:not([hidden])').waitFor();
+  await fit();
+  await win.waitForTimeout(900);
+  await shot(win, `window-done-${scheme}`);
+  await win.goto(`${base}/progress.html?mock&id=5`);
+  await win.waitForTimeout(800);
+  await fit();
+  await shot(win, `window-expired-${scheme}`);
+  await win.close();
+  const mini = await browser.newPage({ viewport: { width: 320, height: 96 }, colorScheme: scheme, deviceScaleFactor: 2 });
+  await mini.goto(`${base}/mini.html?mock`);
+  await mini.locator('#summary', { hasText: 'downloading' }).waitFor();
+  await mini.waitForTimeout(1200);
+  const fitMini = async () => mini.setViewportSize({ width: 320, height: Math.ceil(await mini.evaluate(() => document.getElementById('win').getBoundingClientRect().height)) });
+  await fitMini();
+  await shot(mini, `window-mini-${scheme}`);
+  await mini.click('#expand');
+  await fitMini();
+  await mini.waitForTimeout(500);
+  await shot(mini, `window-mini-open-${scheme}`);
+  await mini.close();
+}
 await browser.close();
 
 // ---------------- extension (no desktop app installed)

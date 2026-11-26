@@ -65,3 +65,15 @@ Severity: **High** = hurts use or accessibility; **Medium** = clearly visible cr
 ## New screens (this release)
 
 The queue scheduler and the site grabber were designed with the same rules from the start: grouped fields, one primary action per dialog, clear empty and loading states, and copy that says what will happen ("Starts at 22:30 on weekdays, stops at 06:00").
+
+## Round 2: icons, motion, columns and download windows
+
+What changed, and the rule behind each change:
+
+- **Icons.** Lucide line icons (one family, 1.75 stroke, 16 px) on the toolbar, side bar, menus, details and statuses. Each icon sits next to a word, except a few icon-only buttons, which have a label and a tooltip.
+- **Status colour carries meaning, or nothing.** Green: done or sharing. Amber: waiting on you (paused, link expired, waiting for a VPN). Red: failed. Neutral: downloading, connecting, waiting in line. Bars and the section map use the same colours. The old link-expired and VPN triangles became a broken link and a shield.
+- **Motion.** Only transform and opacity, 120 to 360 ms, ease-out: new rows slide in, a status icon pops when it changes, bars carry a sheen while downloading, the downloading arrow nudges, menus and banners ease in, chevrons turn, the "done" window builds up in steps. Folding the side bar or details animates its size once per click; dragging is instant. Reduced motion turns all of it into quick fades.
+- **The list.** Type is its own column instead of a square inside Name. Fourteen columns, seven shown by default; sortable, resizable, remembered. Name takes the leftover width; past the window's width the list scrolls sideways under a sticky header. Rows update in place, so 150+ downloads scroll without rebuilding.
+- **Layout.** The side bar folds to an icon rail and the details panel to a one-line summary (name and status stay visible). Both resize by dragging a hairline with a wider grab area, or with the arrow keys; double-click folds the side bar.
+- **Download windows.** One per download, sized to its content, with a one-line form, plus a mini window that grows upwards from the bottom-right corner. Neither steals focus when it opens by itself, at most three open at once, and queued downloads stay quiet.
+- **Fixed on the way:** `color-mix(in oklch, …)` with a colourless colour drifted the hue (the warning banner looked blue). Mixing is now in oklab.

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Downloads</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="windows.css">
+</head>
+<body class="small-window mini">
+  <main class="win" id="win">
+    <header class="mini-head" data-tauri-drag-region>
+      <span class="mini-icon" data-tauri-drag-region><i data-icon="downloading"></i></span>
+      <div class="mini-summary" data-tauri-drag-region>
+        <strong id="summary" data-tauri-drag-region>Nothing downloading</strong>
+        <span class="muted small num" id="sub" data-tauri-drag-region></span>
+      </div>
+      <button class="btn icon subtle" id="expand" aria-expanded="false" aria-controls="items" title="Show each download"><i data-icon="chevron-up" class="chev"></i></button>
+      <button class="btn icon subtle" id="app" title="Open Layó's Download Manager" aria-label="Open Layó's Download Manager"><i data-icon="maximize"></i></button>
+      <button class="btn icon subtle" id="dismiss" title="Close the mini window" aria-label="Close the mini window"><i data-icon="x"></i></button>
+    </header>
+    <div class="bar" id="total"><span></span></div>
+    <ul class="mini-items" id="items" hidden></ul>
+  </main>
+  <script type="module" src="mini.js"></script>
+</body>
+</html>

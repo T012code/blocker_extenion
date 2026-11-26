@@ -2,8 +2,12 @@
 // the toolbar. Dialogs are in dialogs.js.
 
 import { invoke, listen } from './backend.js';
-import { STATUS_TEXT, action, bytes, eta, percent, speed } from './format.js';
+import { action, bytes, eta, percent, speed } from './format.js';
 import { initDialogs, openAdd, openDeleteQueue, openGrab, openQueue, openRemove, openSchedule, openSettings } from './dialogs.js';
+import { hydrateIcons, icon } from './icons.js';
+import { initLayout } from './layout.js';
+import { renderMap } from './sectionmap.js';
+import { COLUMNS, DownloadTable, statusEl } from './table.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -18,6 +22,8 @@ let filter = 'all';
 export let queues = [];
 let query = '';
 export let info = { sectionPresets: [1, 2, 4, 8, 16, 24, 32, 48, 64], maxConnections: 64 };
+/** The list's columns, sorting and rows. Created in start(). */
+let table;
 
 // ---------- helpers
 
@@ -65,57 +71,8 @@ function progressOf(d) {
   return { done, size, speed: l && isActive(d.status) ? l.speed : 0, segments: l?.segments ?? [] };
 }
 
-function kindLabel(d) {
-  if (isTorrent(d)) return 'P2P';
-  if (kindOf(d) === 'media') return 'VID';
-  const ext = (d.fileName.split('.').pop() || '').slice(0, 4).toUpperCase();
-  return ext && ext !== d.fileName.toUpperCase() ? ext : 'FILE';
-}
-
-/** Status as a word with a shape (never colour alone). */
-function statusBadge(d) {
-  const b = document.createElement('span');
-  b.className = `status s-${d.status}`;
-  b.textContent = STATUS_TEXT[d.status] ?? d.status;
-  return b;
-}
-
-// ---------- list
-
-function renderRow(d) {
-  const tr = document.createElement('tr');
-  tr.dataset.id = d.id;
-  const p = progressOf(d);
-  const pct = d.status === 'completed' ? 100 : percent(p.done, p.size);
-  tr.className = `${d.status}${selected.has(d.id) ? ' selected' : ''}`;
-  tr.setAttribute('aria-selected', selected.has(d.id) ? 'true' : 'false');
-  if (d.id === lastClicked) tr.dataset.cursor = '1';
-
-  const name = document.createElement('td');
-  name.innerHTML = '<div class="name"><span class="kind"></span><span class="text"></span></div>';
-  name.querySelector('.kind').textContent = kindLabel(d);
-  name.querySelector('.text').textContent = d.fileName;
-  name.title = d.fileName;
-
-  const size = document.createElement('td');
-  size.textContent = p.size ? bytes(p.size) : '';
-
-  const prog = document.createElement('td');
-  prog.innerHTML = '<div class="progress"><div class="bar"><span></span></div><span class="pct"></span></div>';
-  prog.querySelector('.bar span').style.setProperty('--p', String((pct ?? 0) / 100));
-  prog.querySelector('.pct').textContent = pct != null ? `${pct}%` : '';
-
-  const sp = document.createElement('td');
-  sp.textContent = d.status === 'downloading' ? speed(p.speed) : '';
-  const left = document.createElement('td');
-  left.textContent = d.status === 'downloading' ? eta((p.size ?? 0) - p.done, p.speed) : '';
-  const st = document.createElement('td');
-  st.append(statusBadge(d));
-  if (d.error && d.status !== 'completed') st.title = d.error;
-
-  tr.append(name, size, prog, sp, left, st);
-  return tr;
-}
+const queueName = (id) => (id == null ? '' : queues.find((q) => q.id === id)?.name ?? '');
+const tableCtx = () => ({ progressOf, queueName, selected, cursor: lastClicked });
 
 let renderQueued = false;
 export function render() {
@@ -124,8 +81,9 @@ export function render() {
   requestAnimationFrame(() => {
     renderQueued = false;
     const list = [...downloads.values()].sort((a, b) => b.id - a.id);
-    const shown = list.filter(matches);
-    $('rows').replaceChildren(...shown.map(renderRow));
+    const ctx = tableCtx();
+    const shown = table.sort(list.filter(matches), ctx);
+    table.update(shown, ctx);
     $('empty').hidden = shown.length > 0;
     if (!shown.length) {
       const q = currentQueue();
@@ -171,8 +129,11 @@ function renderQueues(list) {
     b.dataset.filter = `queue:${q.id}`;
     const n = document.createElement('span');
     n.className = 'label';
-    if (q.running) n.append(Object.assign(document.createElement('span'), { className: 'running-mark', title: 'Running' }));
-    n.append(q.name);
+    const ic = document.createElement('span');
+    ic.className = 'queue-icon';
+    ic.append(icon('queue'));
+    if (q.running) ic.append(Object.assign(document.createElement('span'), { className: 'running-mark' }));
+    n.append(ic, Object.assign(document.createElement('span'), { className: 'text', textContent: q.name }));
     b.title = q.running ? `${q.name}, running` : q.name;
     const c = document.createElement('span');
     c.className = 'count';
@@ -238,49 +199,6 @@ function renderBanner(list) {
 
 // ---------- details
 
-function renderMap(d, p) {
-  const map = $('d-map');
-  map.className = 'sectionmap';
-  if (d.status === 'completed') {
-    map.classList.add('done');
-    map.replaceChildren();
-    map.setAttribute('aria-label', 'Complete');
-    return;
-  }
-  const size = p.size;
-  let segs = p.segments.length ? p.segments : (d.segments ?? []).map((s) => ({ ...s, active: false }));
-  if (!size || !segs.length || segs[0].end > 1e18) {
-    // No section map (torrent, video, or unknown size): one bar.
-    map.classList.add('whole');
-    const pct = percent(p.done, size) ?? 0;
-    const seg = document.createElement('div');
-    seg.className = 'seg';
-    seg.style.cssText = 'left:0;width:100%';
-    seg.innerHTML = '<div class="fill"></div>';
-    seg.firstChild.style.setProperty('--p', String(pct / 100));
-    map.replaceChildren(seg);
-    map.setAttribute('aria-label', `${pct}% downloaded`);
-    return;
-  }
-  segs = [...segs].sort((a, b) => a.start - b.start);
-  map.replaceChildren(...segs.map((s) => {
-    const el = document.createElement('div');
-    el.className = `seg${s.active ? ' active' : ''}`;
-    el.style.left = `${(s.start / size) * 100}%`;
-    el.style.width = `${((s.end - s.start) / size) * 100}%`;
-    const done = s.end > s.start ? Math.min(1, (s.pos - s.start) / (s.end - s.start)) : 1;
-    el.style.setProperty('--cursor', `calc(${done * 100}% - 3px)`);
-    const fill = document.createElement('div');
-    fill.className = 'fill';
-    fill.style.setProperty('--p', String(done));
-    el.append(fill);
-    return el;
-  }));
-  const active = segs.filter((s) => s.active).length;
-  map.setAttribute('aria-label', `${segs.length} sections, ${active} downloading`);
-  $('d-map-caption').textContent = `${segs.length} sections · ${active} downloading now`;
-}
-
 function fillSectionSelect(select, value) {
   const presets = new Set(info.sectionPresets);
   if (value && !presets.has(value)) presets.add(value);
@@ -294,14 +212,22 @@ function fillSectionSelect(select, value) {
 }
 export { fillSectionSelect };
 
+let detailsSig = '';
 function renderDetails() {
   const sel = selectedDownloads();
   const d = sel.length === 1 ? sel[0] : null;
-  $('details').hidden = !d;
-  if (!d) return;
+  $('details').classList.toggle('empty-sel', !d);
+  $('details-none').textContent = sel.length > 1 ? `${sel.length} downloads selected.` : 'Select a download to see its sections, speed and where it\'s saved.';
+  if (!d) { detailsSig = ''; return; }
   const p = progressOf(d);
   $('d-name').textContent = d.fileName;
-  $('d-status').replaceWith(Object.assign(statusBadge(d), { id: 'd-status' }));
+  $('d-name').title = d.fileName;
+  const sig = `${d.id}:${d.status}`;
+  const st = statusEl(d);
+  st.id = 'd-status';
+  if (detailsSig && detailsSig.split(':')[0] === String(d.id) && detailsSig !== sig) st.classList.add('changed');
+  if (detailsSig !== sig) $('d-status').replaceWith(st);
+  detailsSig = sig;
   $('d-map-caption').textContent = '';
   const pct = d.status === 'completed' ? 100 : percent(p.done, p.size);
   $('d-done').textContent = p.size ? `${bytes(p.done)} of ${bytes(p.size)}${pct != null ? ` (${pct}%)` : ''}` : bytes(p.done);
@@ -326,7 +252,7 @@ function renderDetails() {
     );
     $('d-queue').value = d.queueId != null ? String(d.queueId) : '';
   }
-  renderMap(d, p);
+  renderMap($('d-map'), d, p, $('d-map-caption'));
 }
 
 // ---------- events from the app
@@ -397,6 +323,7 @@ function onRowDoubleClick(e) {
 function closeMenus() {
   for (const m of document.querySelectorAll('.menu')) m.hidden = true;
   $('btn-more').setAttribute('aria-expanded', 'false');
+  $('btn-columns').setAttribute('aria-expanded', 'false');
 }
 
 /** Opens a menu at a point, kept inside the window, with focus on its first item. */
@@ -409,10 +336,11 @@ function openMenu(menu, x, y) {
   menu.querySelector('button:not(:disabled)')?.focus();
 }
 
-function menuItem(label, onClick, { disabled = false, danger = false, kbd = '' } = {}) {
+function menuItem(label, onClick, { disabled = false, danger = false, kbd = '', ico = '' } = {}) {
   const b = document.createElement('button');
   b.setAttribute('role', 'menuitem');
-  b.textContent = label;
+  if (ico) b.append(icon(ico));
+  b.append(label);
   b.disabled = disabled;
   if (danger) b.className = 'danger';
   if (kbd) b.append(Object.assign(document.createElement('span'), { className: 'kbd', textContent: kbd }));
@@ -429,29 +357,65 @@ function openRowMenu(x, y) {
   const canPause = sel.some((d) => action(d.status) === 'pause');
   const items = [];
   if (one) {
-    items.push(menuItem('Open', () => run(invoke('open_download', { id: one.id }), 'Couldn\'t open it'), { disabled: one.status !== 'completed' && one.status !== 'seeding', kbd: 'Enter' }));
-    items.push(menuItem('Show in folder', () => run(invoke('show_in_folder', { id: one.id }), 'Couldn\'t show the folder')));
+    items.push(menuItem('Open', () => run(invoke('open_download', { id: one.id }), 'Couldn\'t open it'), { disabled: one.status !== 'completed' && one.status !== 'seeding', kbd: 'Enter', ico: 'external' }));
+    items.push(menuItem('Show in folder', () => run(invoke('show_in_folder', { id: one.id }), 'Couldn\'t show the folder'), { ico: 'folder' }));
+    items.push(menuItem('Show download window', () => showWindow(one), { ico: 'maximize' }));
     items.push(document.createElement('hr'));
   }
-  items.push(menuItem('Continue', resumeSelected, { disabled: !canGo, kbd: 'Ctrl+R' }));
-  items.push(menuItem('Pause', pauseSelected, { disabled: !canPause, kbd: 'Ctrl+P' }));
+  items.push(menuItem('Continue', resumeSelected, { disabled: !canGo, kbd: 'Ctrl+R', ico: 'play' }));
+  items.push(menuItem('Pause', pauseSelected, { disabled: !canPause, kbd: 'Ctrl+P', ico: 'pause' }));
   if (queues.length) {
     items.push(document.createElement('hr'));
     for (const q of queues) {
       items.push(menuItem(`Move to "${q.name}"`, async () => {
         await run(invoke('set_queue', { ids: sel.map((d) => d.id), queueId: q.id }), 'Couldn\'t move them');
         toast(`Moved to ${q.name}`);
-      }, { disabled: sel.every((d) => d.queueId === q.id) }));
+      }, { disabled: sel.every((d) => d.queueId === q.id), ico: 'queue' }));
     }
     if (sel.some((d) => d.queueId != null)) {
       items.push(menuItem('Take out of queue', () => run(invoke('set_queue', { ids: sel.map((d) => d.id), queueId: null }), 'Couldn\'t move them')));
     }
   }
   items.push(document.createElement('hr'));
-  if (one) items.push(menuItem('Copy address', () => copyAddress(one)));
-  items.push(menuItem(one ? 'Remove from list…' : `Remove ${sel.length} from list…`, () => openRemove(sel), { danger: true, kbd: 'Del' }));
+  if (one) items.push(menuItem('Copy address', () => copyAddress(one), { ico: 'copy' }));
+  items.push(menuItem(one ? 'Remove from list…' : `Remove ${sel.length} from list…`, () => openRemove(sel), { danger: true, kbd: 'Del', ico: 'trash' }));
   $('menu-row').replaceChildren(...items);
   openMenu($('menu-row'), x, y);
+}
+
+/** The download's own window (progress, sections, Pause), as in the browser's download bar. */
+function showWindow(d) {
+  run(invoke('open_download_window', { id: d.id }), 'Couldn\'t open the window');
+}
+
+/** Show or hide columns; also on right-click of the header. */
+function openColumnsMenu(x, y) {
+  const visible = table.columns.map((c) => c.key);
+  const items = [Object.assign(document.createElement('p'), { className: 'menu-title', textContent: 'Columns' })];
+  for (const c of COLUMNS) {
+    const b = document.createElement('button');
+    b.setAttribute('role', 'menuitemcheckbox');
+    const on = visible.includes(c.key);
+    b.setAttribute('aria-checked', String(on));
+    const mark = document.createElement('span');
+    mark.className = 'check-mark';
+    if (on) mark.append(icon('check'));
+    b.append(mark, c.label);
+    if (c.key === 'name') b.disabled = true;
+    b.addEventListener('click', () => {
+      table.toggleColumn(c.key);
+      render();
+      const r = $('menu-columns').getBoundingClientRect();
+      openColumnsMenu(r.left, r.top);
+      $('menu-columns').querySelector(`[aria-checked]:nth-of-type(${COLUMNS.indexOf(c) + 1})`)?.focus();
+    });
+    items.push(b);
+  }
+  items.push(document.createElement('hr'));
+  items.push(menuItem('Reset columns', () => { table.resetColumns(); render(); }));
+  $('menu-columns').replaceChildren(...items);
+  openMenu($('menu-columns'), x, y);
+  $('btn-columns').setAttribute('aria-expanded', 'true');
 }
 
 async function copyAddress(d) {
@@ -516,7 +480,16 @@ function bindExtras() {
   $('btn-clear-finished').addEventListener('click', () => openRemove(selectedDownloads(), 'finished'));
   $('empty-add').addEventListener('click', () => openAdd());
   $('qb-schedule').addEventListener('click', () => { const q = currentQueue(); if (q) openSchedule(q); });
-  addEventListener('mousedown', (e) => { if (!e.target.closest('.menu, #btn-more')) closeMenus(); });
+  addEventListener('mousedown', (e) => { if (!e.target.closest('.menu, #btn-more, #btn-columns')) closeMenus(); });
+  $('btn-columns').addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!$('menu-columns').hidden) return closeMenus();
+    const r = $('btn-columns').getBoundingClientRect();
+    openColumnsMenu(r.right - 220, r.bottom + 4);
+  });
+  $('table').querySelector('thead').addEventListener('contextmenu', (e) => { e.preventDefault(); openColumnsMenu(e.clientX, e.clientY); });
+  $('btn-mini').addEventListener('click', () => run(invoke('show_mini'), 'Couldn\'t open the mini window'));
+  $('d-window').addEventListener('click', () => { const [d] = selectedDownloads(); if (d) showWindow(d); });
   addEventListener('blur', closeMenus);
   addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && document.querySelector('.menu:not([hidden])')) { closeMenus(); e.stopPropagation(); }
@@ -607,6 +580,9 @@ function bind() {
 }
 
 async function start() {
+  hydrateIcons();
+  table = new DownloadTable({ table: $('table'), onChange: render });
+  initLayout();
   bind();
   info = { ...info, ...(await run(invoke('app_info'), 'Couldn\'t start')) };
   initDialogs();

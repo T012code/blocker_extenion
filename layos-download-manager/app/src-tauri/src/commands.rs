@@ -369,3 +369,57 @@ pub async fn grab_site(options: GrabOptions) -> R<GrabResult> {
 pub fn cancel_shutdown() -> R<()> {
     crate::power::cancel_shutdown()
 }
+
+// ---------- download windows and the mini window
+
+#[tauri::command]
+pub fn get(state: S, id: i64) -> R<Download> {
+    state.engine.get(id).map_err(err)
+}
+
+/// Opens a download's own window (from the list, its menu or the mini window).
+#[tauri::command]
+pub async fn open_download_window(app: tauri::AppHandle, id: i64) -> R<()> {
+    crate::windows::open_download(&app, id, true).map_err(err)
+}
+
+#[tauri::command]
+pub async fn show_mini(app: tauri::AppHandle, state: S<'_>) -> R<()> {
+    state.windows.set_mini_dismissed(false);
+    crate::windows::show_mini(&app).map_err(err)
+}
+
+/// The mini window's close button: hide it until it's asked for again.
+#[tauri::command]
+pub fn mini_dismiss(state: S, window: tauri::WebviewWindow) -> R<()> {
+    state.windows.set_mini_dismissed(true);
+    window.hide().map_err(err)
+}
+
+/// The mini window hides itself when nothing is downloading.
+#[tauri::command]
+pub fn window_hide(window: tauri::WebviewWindow) -> R<()> {
+    window.hide().map_err(err)
+}
+
+#[tauri::command]
+pub fn window_close(window: tauri::WebviewWindow) -> R<()> {
+    window.close().map_err(err)
+}
+
+/// A small window switching between its full and one-line forms.
+#[tauri::command]
+pub fn window_size(window: tauri::WebviewWindow, width: f64, height: f64) -> R<()> {
+    let (w, h) = (width.clamp(240.0, 720.0), height.clamp(48.0, 720.0));
+    crate::windows::resize(&window, w, h).map_err(err)
+}
+
+#[tauri::command]
+pub fn window_title(window: tauri::WebviewWindow, title: String) -> R<()> {
+    window.set_title(&title).map_err(err)
+}
+
+#[tauri::command]
+pub fn show_app(app: tauri::AppHandle) {
+    crate::state::show_window(&app);
+}

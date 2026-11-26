@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"What the main window may do.","local":true,"windows":["main"],"permissions":["core:default","dialog:allow-open","notification:default"]}}
+{"default":{"identifier":"default","description":"What the app's windows may do: the main window, each download's window and the mini window.","local":true,"windows":["main","mini","dl-*"],"permissions":["core:default","core:window:allow-start-dragging","dialog:allow-open","notification:default"]}}

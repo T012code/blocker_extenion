@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Download</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="windows.css">
+</head>
+<body class="small-window">
+  <main class="win" id="win" aria-live="off">
+    <!-- While downloading -->
+    <section class="pw-running" id="running">
+      <header class="pw-head">
+        <span class="pw-type" id="type"></span>
+        <div class="pw-title">
+          <h1 id="name">…</h1>
+          <p class="muted small" id="host"></p>
+        </div>
+      </header>
+      <div class="pw-progress">
+        <div class="pw-numbers">
+          <strong class="pw-pct num" id="pct">0%</strong>
+          <span class="muted num" id="amount"></span>
+          <span class="spacer"></span>
+          <span id="status"></span>
+        </div>
+        <div class="bar big" id="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Progress"><span></span></div>
+        <p class="pw-line muted num" id="line"></p>
+      </div>
+      <div class="pw-more" id="more">
+        <dl class="facts pw-facts">
+          <div><dt>Speed</dt><dd class="num" id="speed">—</dd></div>
+          <div><dt>Time left</dt><dd class="num" id="eta">—</dd></div>
+          <div><dt>Sections</dt><dd class="num" id="sections">—</dd></div>
+          <div><dt>Resume</dt><dd id="resume">—</dd></div>
+        </dl>
+        <div class="sectionmap" id="map" role="img" aria-label="Sections"></div>
+        <p class="error small" id="error" hidden></p>
+      </div>
+      <footer class="pw-actions">
+        <button class="btn subtle" id="toggle" aria-expanded="true" aria-controls="more" title="Show less (one line)"><i data-icon="chevron-down" class="chev"></i><span class="label">Less</span></button>
+        <span class="spacer"></span>
+        <button class="btn" id="hide" title="Close this window. The download carries on.">Hide</button>
+        <button class="btn primary" id="pause"><i data-icon="pause"></i><span class="label">Pause</span></button>
+      </footer>
+    </section>
+
+    <!-- Finished -->
+    <section class="pw-done" id="done" hidden>
+      <div class="pw-done-mark"><i data-icon="done" data-size="28"></i></div>
+      <h1>Download complete</h1>
+      <p class="pw-done-name" id="done-name"></p>
+      <p class="muted small num" id="done-meta"></p>
+      <label class="check small"><input type="checkbox" id="dont-show"><span>Don't show this when a download finishes</span></label>
+      <footer class="pw-actions">
+        <button class="btn" id="folder"><i data-icon="folder"></i>Show in folder</button>
+        <span class="spacer"></span>
+        <button class="btn" id="close">Close</button>
+        <button class="btn primary" id="open"><i data-icon="external"></i>Open</button>
+      </footer>
+    </section>
+  </main>
+  <div class="toast" id="toast" hidden role="status"></div>
+  <script type="module" src="progress.js"></script>
+</body>
+</html>

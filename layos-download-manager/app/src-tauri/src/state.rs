@@ -21,6 +21,7 @@ pub struct AppState {
     pub queues: Arc<Queues>,
     pub settings: Mutex<AppSettings>,
     pub tools: Tools,
+    pub windows: crate::windows::Windows,
     /// Shared with the browser bridge: show the "add download" window for browser downloads.
     ask: Arc<Mutex<bool>>,
     data_dir: PathBuf,
@@ -107,6 +108,7 @@ impl AppState {
             queues,
             settings: Mutex::new(settings),
             tools,
+            windows: Default::default(),
             ask,
             data_dir,
             torrents: tokio::sync::Mutex::new(None),
@@ -188,13 +190,25 @@ impl AppState {
             loop {
                 match rx.recv().await {
                     Ok(ev) => {
-                        if let Event::Updated { download } = &ev
-                            && download.status == DownloadStatus::Completed
-                            && me.settings.lock().unwrap().notify_on_complete
-                        {
-                            notify_done(&app, &download.file_name);
-                        }
                         let _ = app.emit("engine", &ev);
+                        match &ev {
+                            Event::Added { download } => {
+                                me.windows.added(download.id);
+                                let s = me.settings.lock().unwrap().clone();
+                                me.windows.updated(&app, download, &s);
+                            }
+                            Event::Updated { download } => {
+                                let s = me.settings.lock().unwrap().clone();
+                                if download.status == DownloadStatus::Completed
+                                    && s.notify_on_complete
+                                {
+                                    notify_done(&app, &download.file_name);
+                                }
+                                me.windows.updated(&app, download, &s);
+                            }
+                            Event::Removed { id } => me.windows.removed(&app, *id),
+                            Event::Progress { .. } => {}
+                        }
                     }
                     Err(RecvError::Lagged(_)) => {}
                     Err(RecvError::Closed) => break,

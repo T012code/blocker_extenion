@@ -7,6 +7,7 @@ mod power;
 mod settings;
 mod state;
 mod tray;
+mod windows;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -126,6 +127,11 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            // Download windows and the mini window just close; only the main window
+            // goes to the tray.
+            if window.label() != "main" {
+                return;
+            }
             let state = window.state::<Arc<state::AppState>>();
             match event {
                 WindowEvent::CloseRequested { api, .. } => {
@@ -177,6 +183,15 @@ fn main() {
             commands::queue_schedule,
             commands::grab_site,
             commands::cancel_shutdown,
+            commands::get,
+            commands::open_download_window,
+            commands::show_mini,
+            commands::mini_dismiss,
+            commands::window_hide,
+            commands::window_close,
+            commands::window_size,
+            commands::window_title,
+            commands::show_app,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Layó's Download Manager");

@@ -184,6 +184,7 @@ try {
       await page.locator('#menu-row:not([hidden])').waitFor();
       const items = await page.locator('#menu-row button').allTextContents();
       assert.ok(items.some((t) => t.startsWith('Remove')) && items.some((t) => t.startsWith('Copy address')), items.join(' | '));
+      await page.waitForTimeout(300);
       if (shots) await page.screenshot({ path: join(shots, 'app-context-menu.png') });
       await page.keyboard.press('Escape');
       await page.locator('#menu-row[hidden]').waitFor({ state: 'attached' });
@@ -248,6 +249,7 @@ try {
     assert.deepEqual(errors, [], 'no errors in the page');
     await page.close();
   }
+  await layoutAndWindowTests();
 } catch (e) {
   failed = true;
   console.error('FAILED:', e);
@@ -256,3 +258,228 @@ try {
   server.close();
 }
 process.exit(failed ? 1 : 0);
+
+// The list's columns, sorting and scrolling; folding and resizing the side bar and details;
+// a download's own window and the mini window.
+async function layoutAndWindowTests() {
+  const base = url.replace('index.html?mock', '');
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  await page.goto(url);
+  await page.locator('#rows tr.blocked').waitFor();
+
+  // Status colours: red failed, green done, amber waiting on you, neutral otherwise.
+  const tones = await page.evaluate(() => {
+    const css = getComputedStyle(document.documentElement);
+    const probe = (v) => { const e = document.createElement('i'); e.style.color = `var(${v})`; document.body.append(e); const c = getComputedStyle(e).color; e.remove(); return c; };
+    const want = { good: probe('--success'), held: probe('--warning'), bad: probe('--danger'), neutral: probe('--ink') };
+    void css;
+    return [...document.querySelectorAll('#rows tr')].map((tr) => {
+      const s = tr.querySelector('.status');
+      const tone = [...s.classList].find((c) => c.startsWith('tone-')).slice(5);
+      return { status: tr.className.split(' ')[0], tone, ok: getComputedStyle(s).color === want[tone], icon: !!s.querySelector('svg') };
+    });
+  });
+  const toneOf = Object.fromEntries(tones.map((t) => [t.status, t.tone]));
+  assert.equal(toneOf.completed, 'good');
+  assert.equal(toneOf.paused, 'held');
+  assert.equal(toneOf.needsRefresh, 'held');
+  assert.equal(toneOf.blocked, 'held');
+  assert.equal(toneOf.downloading, 'neutral');
+  assert.ok(tones.every((t) => t.ok && t.icon), JSON.stringify(tones));
+  console.log('ok - status icons are green when done, amber for paused, expired or waiting for a VPN, neutral otherwise');
+
+  // Type has its own column; the name cell is only the name.
+  const pdf = page.locator('#rows tr', { hasText: 'report-q3.pdf' });
+  assert.equal((await pdf.locator('td').nth(0).innerText()).trim(), 'PDF');
+  assert.equal((await pdf.locator('td').nth(1).innerText()).trim(), 'report-q3.pdf');
+  console.log('ok - file type is a column of its own');
+
+  // Sorting by size, both ways.
+  const sortedBySize = (dir) => page.waitForFunction((d) => {
+    const toBytes = (t) => { const [n, u] = t.split(' '); return Number(n) * 1024 ** ['B', 'KB', 'MB', 'GB', 'TB'].indexOf(u); };
+    const v = [...document.querySelectorAll('#rows tr')].map((r) => toBytes(r.children[2].textContent));
+    return v.length === 5 && v.every((x, i) => i === 0 || (x - v[i - 1]) * d >= 0);
+  }, dir);
+  await page.click('th[data-key="size"] .th-button');
+  assert.equal(await page.getAttribute('th[data-key="size"]', 'aria-sort'), 'ascending');
+  await sortedBySize(1);
+  await page.click('th[data-key="size"] .th-button');
+  assert.equal(await page.getAttribute('th[data-key="size"]', 'aria-sort'), 'descending');
+  await sortedBySize(-1);
+  console.log('ok - clicking a column header sorts by it, then the other way');
+
+  // Columns: add all of them, then the list scrolls sideways.
+  await page.click('#btn-columns');
+  for (const label of ['Downloaded', 'Added', 'Finished', 'Sections', 'Queue', 'Folder', 'Address']) {
+    await page.locator('#menu-columns button', { hasText: label }).click();
+    await page.locator('#menu-columns:not([hidden])').waitFor();
+  }
+  await page.keyboard.press('Escape');
+  for (const key of ['downloaded', 'added', 'finished', 'sections', 'queue', 'folder', 'address']) await page.locator(`th[data-key="${key}"]`).waitFor();
+  const wide = await page.evaluate(() => { const l = document.getElementById('list'); l.scrollLeft = 400; return { sw: l.scrollWidth, cw: l.clientWidth, left: l.scrollLeft }; });
+  assert.ok(wide.sw > wide.cw && wide.left > 0, JSON.stringify(wide));
+  assert.equal((await page.locator('#rows tr', { hasText: 'report-q3.pdf' }).locator('td').last().innerText()).trim(), 'files.example.net');
+  console.log(`ok - all 14 columns can be shown, and the list scrolls sideways (${wide.sw}px in ${wide.cw}px)`);
+
+  // Resize a column by dragging its edge.
+  const before = (await page.locator('th[data-key="size"]').boundingBox()).width;
+  const grip = await page.locator('th[data-key="size"] .col-resize').boundingBox();
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + 64, grip.y + grip.height / 2, { steps: 4 });
+  await page.mouse.up();
+  const after = (await page.locator('th[data-key="size"]').boundingBox()).width;
+  assert.ok(after - before > 50, `${before} -> ${after}`);
+  console.log(`ok - dragging a column's edge resizes it (${Math.round(before)} -> ${Math.round(after)}px)`);
+
+  // Folding and resizing the side bar.
+  const sidebarW = () => page.evaluate(() => document.getElementById('sidebar').getBoundingClientRect().width);
+  await page.click('#btn-sidebar');
+  await page.waitForFunction(() => document.getElementById('sidebar').getBoundingClientRect().width < 60);
+  assert.equal(await page.getAttribute('#btn-sidebar', 'aria-expanded'), 'false');
+  await page.keyboard.press('Control+b');
+  await page.waitForFunction(() => document.getElementById('sidebar').getBoundingClientRect().width === 232);
+  const sp = await page.locator('#split-sidebar').boundingBox();
+  await page.mouse.move(sp.x + 1, 300);
+  await page.mouse.down();
+  await page.mouse.move(sp.x + 81, 300, { steps: 5 });
+  await page.mouse.up();
+  const w1 = await sidebarW();
+  assert.ok(Math.abs(w1 - 312) <= 3, `side bar is ${w1}px`);
+  console.log(`ok - the side bar folds to icons (button and Ctrl+B) and drags wider (${Math.round(w1)}px)`);
+
+  // Folding and resizing the details panel.
+  const detailsH = () => page.evaluate(() => document.getElementById('details').getBoundingClientRect().height);
+  await page.keyboard.press('Control+j');
+  await page.waitForFunction(() => document.getElementById('details').getBoundingClientRect().height <= 49);
+  await page.click('#details-toggle');
+  await page.waitForFunction(() => document.getElementById('details').getBoundingClientRect().height === 248);
+  const dsp = await page.locator('#split-details').boundingBox();
+  await page.mouse.move(600, dsp.y);
+  await page.mouse.down();
+  await page.mouse.move(600, dsp.y - 100, { steps: 5 });
+  await page.mouse.up();
+  const h1 = await detailsH();
+  assert.ok(Math.abs(h1 - 348) <= 3, `details are ${h1}px`);
+  console.log(`ok - the details fold to one line (Ctrl+J and its own button) and drag taller (${Math.round(h1)}px)`);
+
+  // All of it is remembered.
+  await page.reload();
+  await page.locator('#rows tr').first().waitFor();
+  assert.ok(Math.abs((await sidebarW()) - w1) <= 3);
+  assert.ok(Math.abs((await detailsH()) - h1) <= 3);
+  await page.locator('th[data-key="address"]').waitFor();
+  assert.equal(await page.getAttribute('th[data-key="size"]', 'aria-sort'), 'descending');
+  console.log('ok - layout, columns and sorting are remembered');
+
+  // The download's window, from the right-click menu.
+  await page.evaluate(() => { window.__ldmCalls.length = 0; });
+  await page.locator('#rows tr', { hasText: 'ubuntu' }).click({ button: 'right' });
+  await page.locator('#menu-row button', { hasText: 'Show download window' }).click();
+  await page.waitForFunction(() => window.__ldmCalls.some((c) => c.cmd === 'open_download_window' && c.args.id === 1));
+  console.log('ok - "Show download window" opens the download\'s own window');
+
+  // Window settings.
+  await page.click('#btn-settings');
+  await page.locator('#dlg-settings[open]').waitFor();
+  for (const n of ['showProgressWindow', 'showCompleteWindow', 'showMiniWindow']) assert.equal(await page.isChecked(`input[name="${n}"]`), true);
+  await page.uncheck('input[name="showMiniWindow"]');
+  await page.click('#settings-save');
+  const saved = await page.evaluate(() => import('./backend.js').then((b) => b.invoke('get_settings')));
+  assert.equal(saved.showMiniWindow, false);
+  assert.equal(saved.showProgressWindow, true);
+  console.log('ok - download windows, the "done" window and the mini window can each be turned off');
+  assert.deepEqual(errors, [], 'no errors in the page');
+  await page.close();
+
+  // 150 downloads: the list scrolls, the header stays, rows are updated in place.
+  const long = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  long.on('pageerror', (e) => errors.push(e.message));
+  await long.goto(`${url}&many=150`);
+  await long.locator('#rows tr').nth(154).waitFor({ state: 'attached' });
+  assert.equal(await long.locator('#rows tr').count(), 155);
+  const running = await long.locator('#rows tr', { hasText: 'ubuntu' }).elementHandle();
+  await long.waitForTimeout(800);
+  assert.equal(await running.evaluate((tr) => tr.isConnected), true, 'the running row was replaced instead of updated');
+  const scroll = await long.evaluate(async () => {
+    const l = document.getElementById('list');
+    l.scrollTop = l.scrollHeight;
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const last = document.querySelector('#rows tr:last-child').getBoundingClientRect();
+    const box = l.getBoundingClientRect();
+    const head = document.querySelector('thead th').getBoundingClientRect();
+    return { scrolled: l.scrollTop > 0, lastInside: last.bottom <= box.bottom + 1 && last.top >= box.top, headAtTop: Math.abs(head.top - box.top) < 1, pageFits: document.documentElement.scrollHeight <= innerHeight };
+  });
+  assert.deepEqual(scroll, { scrolled: true, lastInside: true, headAtTop: true, pageFits: true });
+  await long.locator('#rows tr').last().click();
+  await long.keyboard.press('ArrowUp');
+  await long.waitForFunction(() => document.querySelector('#rows tr:nth-last-child(2)').classList.contains('selected'));
+  if (shots) await long.screenshot({ path: join(shots, 'app-long-list.png') });
+  console.log('ok - 155 downloads scroll smoothly to the last one, the header stays put, rows update in place');
+  await long.close();
+
+  // A download's window: live progress, one-line form, Pause; and the "done" form.
+  const pw = await browser.newPage({ viewport: { width: 460, height: 360 } });
+  pw.on('pageerror', (e) => errors.push(e.message));
+  await pw.goto(`${base}progress.html?mock&id=1`);
+  await pw.locator('#name', { hasText: 'ubuntu' }).waitFor();
+  const p1 = await pw.locator('#pct').innerText();
+  await pw.waitForFunction((p) => document.getElementById('pct').textContent !== p, p1);
+  await pw.locator('#sections', { hasText: 'of 16' }).waitFor();
+  if (shots) await pw.screenshot({ path: join(shots, 'window-progress.png') });
+  const fullH = await pw.evaluate(() => document.getElementById('win').getBoundingClientRect().height);
+  await pw.click('#toggle');
+  const smallH = await pw.evaluate(() => document.getElementById('win').getBoundingClientRect().height);
+  assert.ok(smallH < fullH / 2, `${fullH} -> ${smallH}`);
+  await pw.waitForFunction((h) => window.__ldmCalls.some((c) => c.cmd === 'window_size' && Math.abs(c.args.height - h) < 2), smallH);
+  if (shots) await pw.screenshot({ path: join(shots, 'window-progress-compact.png'), clip: { x: 0, y: 0, width: 460, height: Math.ceil(smallH) } });
+  await pw.click('#pause');
+  await pw.locator('#status', { hasText: 'Paused' }).waitFor();
+  await pw.locator('#pause', { hasText: 'Continue' }).waitFor();
+  await pw.click('#toggle');
+  console.log(`ok - a download's window shows live progress, shrinks to one line (${Math.round(fullH)} -> ${Math.round(smallH)}px) and pauses`);
+  await pw.goto(`${base}progress.html?mock&id=4`);
+  await pw.locator('#done:not([hidden])', { hasText: 'Download complete' }).waitFor();
+  await pw.locator('#done-name', { hasText: 'report-q3.pdf' }).waitFor();
+  await pw.waitForTimeout(600);
+  if (shots) await pw.screenshot({ path: join(shots, 'window-done.png') });
+  await pw.check('#dont-show');
+  await pw.waitForFunction(() => import('./backend.js').then((b) => b.invoke('get_settings')).then((s) => s.showCompleteWindow === false));
+  console.log('ok - a finished download\'s window offers Open and Show in folder, and can be turned off from there');
+  await pw.close();
+
+  // The mini window.
+  const mini = await browser.newPage({ viewport: { width: 320, height: 240 } });
+  mini.on('pageerror', (e) => errors.push(e.message));
+  await mini.goto(`${base}mini.html?mock`);
+  await mini.locator('#summary', { hasText: '1 downloading' }).waitFor();
+  await mini.click('#expand');
+  await mini.locator('#items li', { hasText: 'ubuntu' }).waitFor();
+  await mini.waitForTimeout(500);
+  if (shots) await mini.screenshot({ path: join(shots, 'window-mini.png'), clip: { x: 0, y: 0, width: 320, height: Math.ceil(await mini.evaluate(() => document.getElementById('win').getBoundingClientRect().height)) } });
+  await mini.locator('#items li button').first().click();
+  await mini.waitForFunction(() => window.__ldmCalls.some((c) => c.cmd === 'open_download_window' && c.args.id === 1));
+  await mini.click('#dismiss');
+  await mini.waitForFunction(() => window.__ldmCalls.some((c) => c.cmd === 'mini_dismiss'));
+  console.log('ok - the mini window sums up what\'s downloading, lists each one, and opens its window');
+
+  // No pills in the small windows either.
+  for (const [p, path] of [[mini, 'mini.html?mock'], [mini, 'progress.html?mock&id=1']]) {
+    await p.goto(base + path);
+    await p.waitForTimeout(400);
+    const pills = await p.evaluate(() => [...document.querySelectorAll('body *')].filter((el) => {
+      const r = el.getBoundingClientRect();
+      if (r.width < 4 || r.height < 4) return false;
+      const cs = getComputedStyle(el);
+      const radius = Math.max(...['TopLeft', 'TopRight', 'BottomLeft', 'BottomRight'].map((c) => parseFloat(cs[`border${c}Radius`]) || 0));
+      return radius > 0 && radius >= Math.min(r.width, r.height) / 2 - 0.5;
+    }).map((el) => el.className));
+    assert.deepEqual(pills, [], `pill-shaped elements in ${path}`);
+  }
+  console.log('ok - no pill shapes in the download and mini windows');
+  await mini.close();
+  assert.deepEqual(errors, [], 'no errors in the pages');
+}

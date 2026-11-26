@@ -68,6 +68,11 @@ Until the desktop app is ready, the browser extension's toolbar pop-up lists you
 
 The main window lists your downloads with their progress, speed and time left. Categories on the left (Video, Music, Documents, Compressed, Programs, Torrents) and a search box narrow the list. Select a download to see its **live section map**: one strip per section, filled as it downloads, with a lime marker where each connection is working. You can change its **number of sections while it runs**.
 
+- **The list:** a **Type** column (icon and extension), then name, size, progress, speed, time left and status. Add more from the **Columns** button or by right-clicking the header: Downloaded, Added, Finished, Sections, Queue, Folder, Address. Click a header to sort (again to reverse, a third time for newest first), drag a header's edge to resize (double-click it to reset). Wider than the window, the list scrolls sideways; the header stays at the top. Rows are updated in place, so hundreds of downloads scroll smoothly.
+- **Status icons:** green when done or sharing, amber when it's waiting on you (paused, link expired, waiting for a VPN), red when it failed; everything else is neutral. Every status has an icon and a word, never colour alone.
+- **Side bar and details:** fold the side bar to an icon rail (Ctrl+B, or the button at the top left) and the details down to one line (Ctrl+J, its Details heading, or the button at the top right). Drag the line between them and the list to resize either one, or use the arrow keys on it. Sizes, columns and sorting are remembered.
+- **Download windows:** each download you start gets a small window of its own with its progress, speed, time left, section map and Pause/Continue. **Less** shrinks it to one line; **Hide** closes it while the download carries on. When the download finishes it turns into a "Download complete" window with **Open** and **Show in folder** (and a box to stop showing it). At most three open by themselves; queued downloads don't open any. Open one any time from the right-click menu or the details.
+- **Mini window:** while anything downloads, a small window above the others (bottom right) sums it up: how many, overall percentage, speed and time left. Expand it to see each download and click one to open its window. It hides itself a few seconds after the last download finishes. Settings → General turns each of these windows off.
 - **Add** (or Ctrl+N, or paste a link anywhere): checks the address first, showing name, size and whether it can be paused and continued. A video page lists its formats; magnet links and `.torrent` files become torrents. You choose the name, folder and sections.
 - **Continue, Pause, Remove** (Ctrl+R, Ctrl+P, Delete) work on one or many selected downloads; double-click opens a finished file.
 - **From the browser:** downloads the extension sends can be confirmed first, and "Download all links" lets you tick which files to get.
@@ -75,11 +80,11 @@ The main window lists your downloads with their progress, speed and time left. C
 - **Queues:** create queues in the sidebar, each running a set number of downloads at once, oldest first. **Start queue** and **Stop queue** run or pause it; downloads can be added straight into a queue or moved between queues; **Delete queue** keeps its downloads in the list or removes them (and their files, if you want).
 - **Scheduler:** each queue can start and stop by itself at set times on chosen days, and then do nothing, close the app, put the computer to sleep, or shut it down (with a minute to cancel, from a banner in the window). The schedule dialog says what will happen in plain words, e.g. "Starts at 22:30 on weekdays, stops at 06:00."
 - **Site grabber** (*All downloads → Grab files from a website*): reads a site's pages to a depth you choose, stays on that site, honours its robots.txt, and lists the files of the types you want, to tick before downloading.
-- **Right-click menu and keyboard:** open, show in folder, continue, pause, move to a queue, copy the address, remove. In the list, ↑/↓ move, Shift extends the selection, Enter opens, Space pauses or continues.
+- **Right-click menu and keyboard:** open, show in folder, show the download window, continue, pause, move to a queue, copy the address, remove. In the list, ↑/↓ move, Shift extends the selection, Enter opens, Space pauses or continues.
 - **Removing in groups:** **Remove** clears the selection, every finished download, every failed or expired one, or everything in the current view, optionally deleting the files too.
 - **Starts with Windows** (in the tray, without opening the window) and can **minimize to the tray**; both are settings. Closing the window keeps it running in the tray, where you can pause or continue everything.
 - **Magnet links and .torrent files** anywhere in Windows open in the app (a setting; turning it off removes the association).
-- Light and dark follow Windows. There are no pill-shaped controls: buttons, labels and toggles are rectangles, and a test checks every element on screen for it. The interface follows a written design audit ([docs/design-audit.md](docs/design-audit.md)) with [before and after screenshots](docs/screenshots/README.md). *Developed by Layó* in the corner links to [layothedeveloper.com](https://layothedeveloper.com).
+- Light and dark follow Windows. There are no pill-shaped controls: buttons, labels and toggles are rectangles, and a test checks every element on screen for it. Icons are from [Lucide](https://lucide.dev); motion is short and only uses transform and opacity (rows slide in, status icons pop when they change, bars carry a moving sheen while downloading), and it stops when Windows asks for reduced motion. The interface follows a written design audit ([docs/design-audit.md](docs/design-audit.md)) with [before and after screenshots](docs/screenshots/README.md), including [the icons, columns and download windows](docs/screenshots/README.md#icons-columns-and-download-windows). *Developed by Layó* in the corner links to [layothedeveloper.com](https://layothedeveloper.com).
 
 ## Download button on videos
 
@@ -142,14 +147,14 @@ layos-download-manager/
   crates/testkit/        Test web servers used by the Rust tests
   vendor/                A patched librqbit part (IPv4 fallback); see its NOTICE.md
   app/src-tauri/         The Windows app (Tauri 2): window, tray, settings, commands
-  app/ui/                Its interface (HTML, CSS, JavaScript; mock.js simulates the backend for tests)
+  app/ui/                Its interface (HTML, CSS, JavaScript; mock.js simulates the backend for tests):
+                         index.html main window, progress.html a download's window, mini.html the mini window;
+                         table.js the list, layout.js folding and resizing, icons.js the Lucide icons
   app/test/              Interface tests in Chromium
   extension/             Browser extension (Chrome-family and Firefox builds)
   brand/                 Colours, fonts and Layó's logo from layothedeveloper.com
   app-icon.png           App icon (drawn by extension/tools/make-icons.py)
 ```
-
-Still to come: `app/` (Tauri desktop app), the video grabber, queues and scheduler, and the Windows installer.
 
 ## Working on it
 

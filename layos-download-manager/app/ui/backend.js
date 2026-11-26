@@ -22,3 +22,9 @@ export async function pick({ directory = false, title, filters } = {}) {
 }
 
 export const isMock = !!mock;
+
+/** This window's label: "main", "mini", or "dl-<id>" for a download's window. */
+export function windowLabel() {
+  if (mock) return new URLSearchParams(location.search).get('window') ?? 'main';
+  return tauri.window.getCurrentWindow().label;
+}

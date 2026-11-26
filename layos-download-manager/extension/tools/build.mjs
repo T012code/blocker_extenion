@@ -24,6 +24,16 @@ if (readFileSync(join(src, 'brand', 'tokens.css'), 'utf8') !== tokens) {
   console.log('updated src/brand/tokens.css from ../brand/tokens.css');
 }
 
+// The icons too: the app's set (../app/ui/icons.js) is copied to src/shared/icons.js.
+const icons = readFileSync(join(root, '..', 'app', 'ui', 'icons.js'), 'utf8');
+const iconsCopy = join(src, 'shared', 'icons.js');
+let iconsOld = '';
+try { iconsOld = readFileSync(iconsCopy, 'utf8'); } catch { /* first build */ }
+if (iconsOld !== icons) {
+  writeFileSync(iconsCopy, icons);
+  console.log('updated src/shared/icons.js from ../app/ui/icons.js');
+}
+
 function chromium() {
   const m = structuredClone(base);
   if (store) delete m.key;

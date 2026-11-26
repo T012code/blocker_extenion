@@ -27,6 +27,9 @@ let settings = {
   launchOnStartup: true,
   startMinimized: true,
   notifyOnComplete: true,
+  showProgressWindow: true,
+  showCompleteWindow: true,
+  showMiniWindow: true,
   openTorrentFiles: true,
   handleTorrentLinks: true,
   seedRatio: 1,
@@ -130,6 +133,20 @@ const seed = () => {
   update(e, { status: 'needsRefresh', downloaded: 40 * 1024 * 1024, error: 'the server refused the link (HTTP 403); it may have expired' });
 };
 seed();
+// ?many=N adds N finished and waiting downloads, to try a long list.
+const many = Number(new URLSearchParams(location.search).get('many')) || 0;
+for (let i = 0; i < many; i++) {
+  const names = ['holiday-photos', 'podcast-episode', 'invoice', 'dataset', 'firmware', 'lecture', 'album-track', 'backup'];
+  const exts = ['zip', 'mp3', 'pdf', 'csv', 'bin', 'mp4', 'flac', '7z'];
+  const k = i % names.length;
+  const d = make({ url: `https://files.example.org/${names[k]}-${String(i + 1).padStart(3, '0')}.${exts[k]}`, size: (5 + ((i * 37) % 900)) * 1024 * 1024 });
+  d.createdAt = Date.now() - (many - i) * 3_600_000;
+  if (i % 3 === 0) update(d, { status: 'completed', downloaded: d.size, completedAt: d.createdAt + 600_000 });
+  else if (i % 3 === 1) update(d, { status: 'paused', downloaded: Math.floor(d.size * ((i * 13) % 97) / 100) });
+}
+
+/** For tests: calls that would change windows, which a browser can't show. */
+window.__ldmCalls = [];
 
 export async function invoke(cmd, args) {
   await new Promise((r) => setTimeout(r, 30));
@@ -226,6 +243,11 @@ export async function invoke(cmd, args) {
     case 'privacy_status': return protectedNow() ? null : 'Waiting for a VPN or proxy. Set one up in Settings → Privacy, or allow torrents without one.';
     case 'test_proxy': if (/1080/.test(args.url)) return null; throw new Error('no answer');
     case 'open_download': case 'show_in_folder': case 'open_portfolio': return null;
+    case 'get': { const d = downloads.get(args.id); if (!d) throw new Error('no such download'); return { ...d, live: undefined }; }
+    case 'open_download_window': case 'show_mini': case 'mini_dismiss': case 'window_hide': case 'window_close':
+    case 'window_size': case 'window_title': case 'show_app':
+      window.__ldmCalls.push({ cmd, args: structuredClone(args) });
+      return null;
     default: throw new Error(`mock: ${cmd} isn't simulated`);
   }
 }

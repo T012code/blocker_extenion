@@ -11,6 +11,7 @@ It includes the following, each under its own licence:
 | Tauri | App framework | MIT or Apache License 2.0 | https://github.com/tauri-apps/tauri |
 | Archivo | Typeface | SIL Open Font License 1.1 | https://github.com/Omnibus-Type/Archivo |
 | SQLite | Download database | Public domain | https://sqlite.org |
+| Lucide | Interface icons (app and extension) | ISC License; icons derived from Feather under the MIT License (texts in `icons.js`) | https://github.com/lucide-icons/lucide |
 
 The full source of Layó's Download Manager, including the small change made to
 librqbit-tracker-comms (see `vendor/librqbit-tracker-comms/NOTICE.md`), is at

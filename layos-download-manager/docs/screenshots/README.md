@@ -100,3 +100,38 @@ These screens didn't exist before.
 ### Site grabber results
 
 ![Site grabber results](after/app-grab-results.png)
+
+## Icons, columns and download windows
+
+The second round: Lucide icons throughout, motion on interaction, a Type column and more columns with sorting and sideways scrolling, a side bar and details panel that fold and resize, status colours that only mean something (green done, amber waiting on you, red failed), and a window per download plus a mini window. Screens in [icons-and-windows/after](icons-and-windows/after).
+
+### Before and after
+
+![Main window (light): before and after](icons-and-windows/compare/app-main-light.png)
+
+![Main window (dark): before and after](icons-and-windows/compare/app-main-dark.png)
+
+![Right-click menu: before and after](icons-and-windows/compare/app-context-menu.png)
+
+![All downloads menu: before and after](icons-and-windows/compare/app-more-menu.png)
+
+![Queue: before and after](icons-and-windows/compare/app-queue.png)
+
+![Settings, General (now with the download window options): before and after](icons-and-windows/compare/app-settings-general.png)
+
+![Empty view: before and after](icons-and-windows/compare/app-empty.png)
+
+### New
+
+| | |
+| --- | --- |
+| 155 downloads, scrolling | ![](icons-and-windows/after/app-long-list.png) |
+| Columns menu | ![](icons-and-windows/after/app-columns-menu.png) |
+| More columns, sorted by size, scrolled sideways | ![](icons-and-windows/after/app-columns-sorted.png) |
+| Side bar and details folded | ![](icons-and-windows/after/app-folded.png) |
+| A download's window | ![](icons-and-windows/after/window-progress-light.png) ![](icons-and-windows/after/window-progress-dark.png) |
+| The same, as one line | ![](icons-and-windows/after/window-progress-compact-light.png) ![](icons-and-windows/after/window-progress-compact-dark.png) |
+| When the link has expired | ![](icons-and-windows/after/window-expired-light.png) ![](icons-and-windows/after/window-expired-dark.png) |
+| Download complete | ![](icons-and-windows/after/window-done-light.png) ![](icons-and-windows/after/window-done-dark.png) |
+| Mini window | ![](icons-and-windows/after/window-mini-light.png) ![](icons-and-windows/after/window-mini-dark.png) |
+| Mini window, expanded | ![](icons-and-windows/after/window-mini-open-light.png) ![](icons-and-windows/after/window-mini-open-dark.png) |

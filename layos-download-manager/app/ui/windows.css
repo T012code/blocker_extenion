@@ -1,0 +1,82 @@
+/* The small windows: a download's own window and the mini window. Built on styles.css. */
+html:has(body.small-window), body.small-window { height: auto; min-height: 0; }
+body.small-window { background: var(--card); overflow: hidden; }
+.win { display: grid; }
+
+/* ---------- a download's window */
+.pw-running, .pw-done { display: grid; gap: var(--space-4); padding: var(--space-5) var(--space-5) var(--space-4); }
+.pw-running[hidden], .pw-done[hidden] { display: none; }
+.pw-head { display: flex; gap: var(--space-3); align-items: center; min-width: 0; }
+.pw-type { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border-radius: var(--radius-md); background: var(--surface); color: var(--ink); }
+.pw-title { min-width: 0; display: grid; gap: 2px; }
+.pw-title h1 { font-size: var(--text-lg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pw-title p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pw-progress { display: grid; gap: var(--space-2); }
+.pw-numbers { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; }
+.pw-pct { font-size: 28px; font-weight: 680; font-stretch: 110%; letter-spacing: -0.02em; line-height: 1; }
+.pw-numbers .status { align-self: center; }
+.bar.big { height: 8px; border-radius: 2px; }
+.pw-line { font-size: var(--text-xs); min-height: 18px; }
+.pw-more { display: grid; gap: var(--space-3); }
+.pw-facts { grid-template-columns: repeat(4, 1fr); gap: var(--space-3); }
+.pw-facts dd { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pw-actions { display: flex; align-items: center; gap: var(--space-2); }
+/* Status colours on the big bar, as in the list. */
+.win[data-status="paused"] .bar > span, .win[data-status="needsRefresh"] .bar > span, .win[data-status="blocked"] .bar > span { background: var(--warning); }
+.win[data-status="queued"] .bar > span, .win[data-status="connecting"] .bar > span { background: var(--ink-muted); }
+.win[data-status="failed"] .bar > span { background: var(--danger); }
+.win[data-status="completed"] .bar > span, .win[data-status="seeding"] .bar > span { background: var(--success); }
+
+/* One line: name, bar, numbers and Pause. */
+.compact .pw-running { gap: var(--space-3); padding: var(--space-3) var(--space-4); }
+.compact .pw-more, .compact .pw-type, .compact .pw-title p, .compact #hide { display: none; }
+.compact .pw-title h1 { font-size: var(--text-md); }
+.compact .pw-pct { font-size: var(--text-lg); }
+.compact .pw-line { display: none; }
+.compact .pw-actions .btn { height: 28px; }
+
+/* Finished. */
+.pw-done { justify-items: start; gap: var(--space-2); }
+.pw-done-mark { width: 48px; height: 48px; display: grid; place-items: center; border-radius: var(--radius-md); background: color-mix(in oklab, var(--success) 14%, var(--card)); color: var(--success); margin-bottom: var(--space-2); }
+.pw-done:not([hidden]) .pw-done-mark { animation: done-in 520ms var(--ease-out) both; }
+.pw-done:not([hidden]) .pw-done-mark .icon { animation: status-pop 520ms 120ms var(--ease-out) both; }
+@keyframes done-in { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: none; } }
+.pw-done h1 { font-size: var(--text-xl); }
+.pw-done-name { font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pw-done .check { margin-top: var(--space-2); }
+.pw-done .pw-actions { width: 100%; margin-top: var(--space-3); }
+.pw-done:not([hidden]) > * { animation: rise-in 360ms var(--ease-out) both; }
+.pw-done > :nth-child(2) { animation-delay: 60ms; }
+.pw-done > :nth-child(3) { animation-delay: 100ms; }
+.pw-done > :nth-child(4) { animation-delay: 140ms; }
+.pw-done > :nth-child(n+5) { animation-delay: 180ms; }
+@keyframes rise-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* ---------- the mini window (no title bar: the header is the handle) */
+body.mini { user-select: none; }
+.mini-head { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-2) var(--space-2) var(--space-4); cursor: default; }
+.mini-icon { width: 32px; height: 32px; display: grid; place-items: center; border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--accent); flex: none; }
+.mini.active .mini-icon .icon { animation: nudge 1.4s var(--ease-in-out) infinite; }
+.mini.idle .mini-icon { background: color-mix(in oklab, var(--success) 14%, var(--card)); color: var(--success); }
+.mini-summary { display: grid; min-width: 0; flex: 1; line-height: 1.3; }
+.mini-summary strong, .mini-summary span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini-head .btn.icon { width: 28px; min-width: 28px; height: 28px; }
+#total { margin: 0 var(--space-4) var(--space-4); }
+.mini.active #total::after {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 40%;
+  background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--card) 55%, transparent), transparent);
+  animation: sheen 1.6s var(--ease-in-out) infinite;
+}
+.mini-items { list-style: none; margin: 0; padding: 0 var(--space-2) var(--space-2); display: grid; gap: 2px; max-height: 272px; overflow: auto; border-top: 1px solid var(--rule); padding-top: var(--space-2); }
+.mini-items[hidden] { display: none; }
+.mini-items button {
+  display: grid; grid-template-columns: 1fr auto; gap: var(--space-1) var(--space-3); width: 100%; padding: var(--space-2);
+  border: 0; border-radius: var(--radius-sm); background: none; cursor: pointer; text-align: left; font: inherit; color: inherit;
+  transition: background-color var(--dur-micro) var(--ease-out);
+}
+.mini-items li { animation: rise-in 240ms var(--ease-out) both; }
+.mini-items button:hover { background: var(--surface); }
+.mini-items .n { font-weight: 560; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.mini-items .s { font-size: var(--text-xs); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.mini-items .bar { grid-column: 1 / -1; }
+.mini-items .paused .bar > span { background: var(--warning); }

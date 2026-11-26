@@ -1,5 +1,6 @@
 import { api } from '../shared/api.js';
 import { STATUS_TEXT, action, bytes, eta, percent, speed } from '../shared/format.js';
+import { icon } from '../shared/icons.js';
 
 const HOST = 'com.layo.downloadmanager';
 const $ = (id) => document.getElementById(id);
@@ -106,7 +107,7 @@ function row(d) {
 
   const meta = document.createElement('div');
   meta.className = 'meta';
-  const parts = [STATUS_TEXT[d.status] ?? d.status];
+  const parts = [];
   if (d.status !== 'completed') {
     parts.push(d.size ? `${bytes(d.downloaded)} of ${bytes(d.size)}${pct != null ? ` (${pct}%)` : ''}` : bytes(d.downloaded));
   } else if (d.size) {
@@ -120,6 +121,7 @@ function row(d) {
   if (d.status === 'needsRefresh') parts.push('download it again from the page to continue');
   if (d.status === 'blocked' && d.error) parts.push(d.error);
   meta.textContent = parts.filter(Boolean).join(' · ');
+  meta.prepend(stateOf(d), parts.length ? ' · ' : '');
   if (d.kind === 'torrent' || d.kind === 'video') {
     const tag = document.createElement('span');
     tag.className = 'badge info';
@@ -137,6 +139,21 @@ function row(d) {
 
   li.append(name, btn, bar, meta);
   return li;
+}
+
+/** Status as icon and word, coloured as in the app: green done, amber waiting on you, red failed. */
+const LOOK = {
+  downloading: ['downloading', 'neutral'], connecting: ['connecting', 'neutral'], queued: ['queued', 'neutral'],
+  completed: ['done', 'good'], seeding: ['seeding', 'good'],
+  paused: ['paused', 'held'], blocked: ['vpn', 'held'], needsRefresh: ['expired', 'held'],
+  failed: ['failed', 'bad'],
+};
+function stateOf(d) {
+  const [ico, tone] = LOOK[d.status] ?? LOOK.queued;
+  const s = document.createElement('span');
+  s.className = `state tone-${tone}`;
+  s.append(icon(ico, { size: 14 }), STATUS_TEXT[d.status] ?? d.status);
+  return s;
 }
 
 let lastItems = [];
