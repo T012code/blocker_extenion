@@ -88,7 +88,12 @@ mod imp {
             r"Software\Microsoft\Windows\CurrentVersion\Run",
             winreg::enums::KEY_ALL_ACCESS,
         ) {
-            for name in ["Layó's Download Manager", "LayosDownloadManager"] {
+            // The product name has a typographic apostrophe (NSIS reads ' as a quote).
+            for name in [
+                "Layó’s Download Manager",
+                "Layó's Download Manager",
+                "LayosDownloadManager",
+            ] {
                 let _ = run.delete_value(name);
             }
         }
