@@ -61,7 +61,7 @@ async fn browser_download_reaches_the_app() {
     let data = test_data(3 * 1024 * 1024);
     let server = TestServer::start(data.clone(), ServerOptions::default()).await;
     let dir = tempfile::tempdir().unwrap();
-    let ipc = dir.path().join("ldm.sock").to_string_lossy().into_owned();
+    let ipc = ldm_ipc::unique_test_path(dir.path(), "ldm");
 
     let mut cfg = EngineConfig::new(dir.path().join("Downloads"));
     cfg.min_segment_size = 256 * 1024;
@@ -137,11 +137,7 @@ async fn browser_download_reaches_the_app() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn ping_without_app_says_not_running_and_does_not_start_it() {
     let dir = tempfile::tempdir().unwrap();
-    let ipc = dir
-        .path()
-        .join("nobody.sock")
-        .to_string_lossy()
-        .into_owned();
+    let ipc = ldm_ipc::unique_test_path(dir.path(), "nobody");
     let marker = dir.path().join("started");
     let replies = talk(
         &ipc,
@@ -168,7 +164,7 @@ async fn starts_the_app_when_needed() {
     let data = test_data(500_000);
     let server = TestServer::start(data.clone(), ServerOptions::default()).await;
     let dir = tempfile::tempdir().unwrap();
-    let ipc = dir.path().join("ldm.sock").to_string_lossy().into_owned();
+    let ipc = ldm_ipc::unique_test_path(dir.path(), "ldm");
     let data_dir = dir.path().join("data");
     let url = server.url("/song.mp3");
 
@@ -226,7 +222,7 @@ async fn pause_and_continue_through_the_bridge() {
     )
     .await;
     let dir = tempfile::tempdir().unwrap();
-    let ipc = dir.path().join("ldm.sock").to_string_lossy().into_owned();
+    let ipc = ldm_ipc::unique_test_path(dir.path(), "ldm");
     let mut cfg = EngineConfig::new(dir.path().join("Downloads"));
     cfg.min_segment_size = 256 * 1024;
     cfg.progress_interval = Duration::from_millis(100);
@@ -329,11 +325,7 @@ async fn pause_and_continue_through_the_bridge() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn list_without_app_does_not_start_it() {
     let dir = tempfile::tempdir().unwrap();
-    let ipc = dir
-        .path()
-        .join("nobody.sock")
-        .to_string_lossy()
-        .into_owned();
+    let ipc = ldm_ipc::unique_test_path(dir.path(), "nobody");
     let marker = dir.path().join("started");
     let replies = talk(
         &ipc,

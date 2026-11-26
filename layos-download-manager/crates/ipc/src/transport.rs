@@ -58,6 +58,24 @@ pub fn default_path() -> String {
     }
 }
 
+/// A fresh, unique pipe (Windows) or socket (elsewhere) address, for tests. `dir` holds
+/// the socket file on Linux and macOS; Windows pipes don't live in folders.
+pub fn unique_test_path(dir: &std::path::Path, name: &str) -> String {
+    static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    #[cfg(windows)]
+    {
+        let _ = dir;
+        format!(r"\\.\pipe\ldm-test-{name}-{}-{n}", std::process::id())
+    }
+    #[cfg(not(windows))]
+    {
+        dir.join(format!("{name}-{n}.sock"))
+            .to_string_lossy()
+            .into_owned()
+    }
+}
+
 pub async fn write_message<W: AsyncWrite + Unpin, T: Serialize>(
     w: &mut W,
     msg: &T,
@@ -261,7 +279,7 @@ mod tests {
     #[tokio::test]
     async fn round_trip_and_single_instance() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("ldm.sock").to_string_lossy().into_owned();
+        let path = unique_test_path(dir.path(), "ldm");
         assert!(matches!(
             request(&path, &Request::Ping, Duration::from_secs(1)).await,
             Err(IpcError::NotRunning)
