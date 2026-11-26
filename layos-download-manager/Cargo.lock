@@ -559,6 +559,7 @@ name = "ldm-engine"
 version = "0.1.0"
 dependencies = [
  "futures-util",
+ "ldm-testkit",
  "mime_guess",
  "percent-encoding",
  "reqwest",
@@ -570,6 +571,49 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+]
+
+[[package]]
+name = "ldm-ipc"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "ldm-native-host"
+version = "0.1.0"
+dependencies = [
+ "ldm-engine",
+ "ldm-ipc",
+ "ldm-service",
+ "ldm-testkit",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "winreg",
+]
+
+[[package]]
+name = "ldm-service"
+version = "0.1.0"
+dependencies = [
+ "ldm-engine",
+ "ldm-ipc",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "ldm-testkit"
+version = "0.1.0"
+dependencies = [
+ "tokio",
 ]
 
 [[package]]
@@ -1538,6 +1582,16 @@ name = "windows_x86_64_msvc"
 version = "0.52.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
+
+[[package]]
+name = "winreg"
+version = "0.56.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d6f32a0ff4a9f6f01231eb2059cc85479330739333e0e58cadf03b6af2cca10"
+dependencies = [
+ "cfg-if",
+ "windows-sys 0.61.2",
+]
 
 [[package]]
 name = "writeable"

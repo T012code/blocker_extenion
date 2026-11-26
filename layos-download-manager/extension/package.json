@@ -1,0 +1,15 @@
+{
+  "name": "layos-download-manager-extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Browser extension for Layó's Download Manager",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "build": "node tools/build.mjs",
+    "package": "node tools/build.mjs --zip --store",
+    "test:e2e": "node tools/build.mjs && node test/e2e/capture.e2e.mjs",
+    "icons": "python3 tools/make-icons.py"
+  }
+}

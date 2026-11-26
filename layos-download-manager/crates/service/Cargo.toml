@@ -1,0 +1,16 @@
+[package]
+name = "ldm-service"
+description = "Connects browser requests to the download engine (used by the app and the headless runner)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "ldm-headless"
+path = "src/main.rs"
+
+[dependencies]
+ldm-engine = { path = "../engine" }
+ldm-ipc = { path = "../ipc" }
+tokio.workspace = true
+tracing.workspace = true

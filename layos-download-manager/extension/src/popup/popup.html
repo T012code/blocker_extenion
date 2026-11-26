@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Layó's Download Manager</title>
+  <link rel="stylesheet" href="../shared/ui.css">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <img src="../icons/icon-32.png" alt="" width="24" height="24">
+    <h1>Layó's Download Manager</h1>
+  </header>
+
+  <section class="card status" id="status">
+    <span class="dot" id="status-dot"></span>
+    <div>
+      <div id="status-title">Checking…</div>
+      <div class="muted small" id="status-detail"></div>
+    </div>
+  </section>
+
+  <label class="card row">
+    <div>
+      <div>Take over browser downloads</div>
+      <div class="muted small" id="bypass-hint">Hold Alt while clicking a link to skip</div>
+    </div>
+    <span class="switch"><input type="checkbox" id="enabled"><span></span></span>
+  </label>
+
+  <section class="card recent">
+    <h2>Recent</h2>
+    <ul id="history"><li class="muted small">Nothing yet. Downloads you start in the browser will show up here.</li></ul>
+  </section>
+
+  <footer>
+    <button class="primary" id="open-app">Open download manager</button>
+    <button id="options">Settings</button>
+  </footer>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

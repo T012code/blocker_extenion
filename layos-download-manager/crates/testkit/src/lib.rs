@@ -1,8 +1,6 @@
 //! A tiny HTTP/1.1 file server for tests. It can refuse ranges, hide the size, go slow,
 //! drop connections part-way, and refuse links, so every engine path can be exercised.
 
-#![allow(dead_code)]
-
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;

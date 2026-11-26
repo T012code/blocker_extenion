@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Layó's Download Manager settings</title>
+  <link rel="stylesheet" href="../shared/ui.css">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <header>
+      <img src="../icons/icon-48.png" alt="" width="40" height="40">
+      <div>
+        <h1>Layó's Download Manager</h1>
+        <p class="muted">Browser extension settings</p>
+      </div>
+    </header>
+
+    <section class="card status">
+      <span class="dot" id="status-dot"></span>
+      <div class="grow">
+        <div id="status-title">Checking the connection…</div>
+        <div class="muted" id="status-detail"></div>
+      </div>
+      <button id="recheck">Check again</button>
+    </section>
+
+    <form id="form">
+      <section class="card">
+        <h2>Taking over downloads</h2>
+        <label class="row">
+          <div>
+            <div>Take over browser downloads</div>
+            <div class="muted">When you download a file of a type below, the browser's download is cancelled and Layó's Download Manager fetches it in several sections at once.</div>
+          </div>
+          <span class="switch"><input type="checkbox" name="enabled"><span></span></span>
+        </label>
+        <label class="row">
+          <div>
+            <div>Take over every download</div>
+            <div class="muted">Ignore the file type list and send everything.</div>
+          </div>
+          <span class="switch"><input type="checkbox" name="captureAll"><span></span></span>
+        </label>
+        <label class="row">
+          <div>
+            <div>Also in private windows</div>
+            <div class="muted">Private-window cookies are passed on so logged-in downloads work.</div>
+          </div>
+          <span class="switch"><input type="checkbox" name="captureIncognito"><span></span></span>
+        </label>
+      </section>
+
+      <section class="card">
+        <h2>File types</h2>
+        <p class="muted">Extensions to take over, separated by spaces. Files with no extension are taken over when the server says they're video, audio, an archive or a program.</p>
+        <textarea name="fileTypes" rows="5" spellcheck="false" aria-label="File types"></textarea>
+        <button type="button" id="reset-types">Reset to the default list</button>
+      </section>
+
+      <section class="card grid">
+        <h2>Exceptions</h2>
+        <label>
+          <span>Bypass key</span>
+          <select name="bypassKey">
+            <option value="alt">Alt</option>
+            <option value="shift">Shift</option>
+            <option value="ctrl">Ctrl</option>
+            <option value="none">None</option>
+          </select>
+          <span class="muted">Hold it while clicking a link to let the browser download that file.</span>
+        </label>
+        <label>
+          <span>Minimum size (KB)</span>
+          <input type="number" name="minSizeKB" min="0" step="1">
+          <span class="muted">Smaller files stay in the browser. 0 means no minimum.</span>
+        </label>
+        <label class="wide">
+          <span>Never take over downloads from these sites</span>
+          <textarea name="skipSites" rows="4" spellcheck="false" placeholder="example.com&#10;mail.google.com"></textarea>
+          <span class="muted">One site per line. A site also covers its subdomains. Form submissions, blob: and data: downloads always stay in the browser, because another program can't repeat them.</span>
+        </label>
+      </section>
+
+      <section class="card grid">
+        <h2>When a download arrives</h2>
+        <label>
+          <span>Show the "add download" window</span>
+          <select name="ask">
+            <option value="app">As set in the app</option>
+            <option value="always">Always</option>
+            <option value="never">Never, start straight away</option>
+          </select>
+        </label>
+        <label class="row">
+          <div>
+            <div>Tell me when a download goes back to the browser</div>
+            <div class="muted">If the app can't be reached, the browser downloads the file instead.</div>
+          </div>
+          <span class="switch"><input type="checkbox" name="notifyFallback"><span></span></span>
+        </label>
+      </section>
+
+      <p class="saved muted" id="saved" role="status" aria-live="polite"></p>
+    </form>
+
+    <section class="card">
+      <h2>Right-click menu</h2>
+      <ul class="muted">
+        <li><b>Download with Layó's DM</b> on any link</li>
+        <li><b>Download this video/audio with Layó's DM</b> on a video or audio player</li>
+        <li><b>Download all links with Layó's DM</b> on a page or a selection (only links to file types in your list)</li>
+      </ul>
+    </section>
+  </main>
+  <script type="module" src="options.js"></script>
+</body>
+</html>

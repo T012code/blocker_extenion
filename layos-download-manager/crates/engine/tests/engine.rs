@@ -1,5 +1,3 @@
-mod support;
-
 use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
@@ -7,7 +5,7 @@ use std::time::{Duration, Instant};
 use ldm_engine::{
     Category, Download, DownloadStatus, Engine, EngineConfig, Event, NewDownload, RequestInfo,
 };
-use support::{ServerOptions, TestServer, test_data};
+use ldm_testkit::{ServerOptions, TestServer, test_data};
 
 const MB: usize = 1024 * 1024;
 

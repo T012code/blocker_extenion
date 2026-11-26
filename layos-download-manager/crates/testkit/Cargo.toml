@@ -1,0 +1,10 @@
+[package]
+name = "ldm-testkit"
+description = "Test HTTP server for Layó's Download Manager tests"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+tokio.workspace = true

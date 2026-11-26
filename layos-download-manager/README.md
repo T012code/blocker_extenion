@@ -2,7 +2,7 @@
 
 A free download manager for Windows. It speeds up downloads by fetching each file in many sections at once, resumes broken downloads, catches downloads from your browser, and grabs videos from web pages.
 
-> **Status:** in development. The download engine is done and tested. The browser extension, desktop app, video grabber, queues and installer come next.
+> **Status:** in development. The download engine, the browser extension and the browser bridge are done and tested. The desktop app, video grabber, queues and installer come next.
 
 ## How the multi-section download works
 
@@ -50,33 +50,79 @@ More sections help most on fast connections and servers that limit speed per con
 - Reads the file name from `Content-Disposition` (including UTF-8 names), then from the address, and makes it safe for Windows
 - Sorts files into Video, Music, Documents, Compressed, Programs and General folders
 
+## Taking over browser downloads
+
+The browser extension (in [`extension/`](extension/)) watches downloads in Chrome, Edge, Opera, Brave, Vivaldi and Firefox. When you download a file of a type on its list (archives, programs, video, audio, documents), it cancels the browser's download and hands the link to the download manager, including the cookies, referrer and user agent, so downloads behind a login keep working. It leaves alone:
+
+- files not on the list (you can edit it, or switch to "take over everything")
+- links you click while holding **Alt**
+- sites on your skip list
+- form submissions and `blob:`/`data:` downloads, which no other program can repeat
+
+If the app can't be reached, the browser gets the download back and nothing is lost. The extension also adds right-click menu items: **Download with Layó's DM**, **Download this video/audio**, and **Download all links**.
+
+```
+browser extension ──Native Messaging──▶ ldm-native-host ──named pipe──▶ download manager ──▶ engine
+```
+
+The bridge program starts the download manager if it isn't running. See [extension/README.md](extension/README.md) for details.
+
 ## Project layout
 
 ```
 layos-download-manager/
-  Cargo.toml          Rust workspace
-  crates/engine/      Download engine (Rust library)
-    src/transfer.rs   Multi-section download and re-splitting
-    src/engine.rs     Add, start, pause, resume, remove; progress events
-    src/http.rs       Requests and the first-byte server check
-    src/store.rs      SQLite storage
-    src/filename.rs   File names
-    src/category.rs   Categories
-    src/limiter.rs    Speed limiter
-    tests/            Integration tests against a local test server
+  Cargo.toml             Rust workspace
+  crates/engine/         Download engine (Rust library)
+    src/transfer.rs      Multi-section download, re-splitting, live section count
+    src/engine.rs        Add, start, pause, resume, remove; progress events
+    src/http.rs          Requests and the first-byte server check
+    src/store.rs         SQLite storage
+    src/filename.rs      File names
+    src/category.rs      Categories
+    src/limiter.rs       Speed limiter
+    tests/               Integration tests against a local test server
+  crates/ipc/            Messages and the local pipe between the bridge and the app
+  crates/service/        Turns browser requests into downloads (shared with the app);
+                         ldm-headless runs it without a window, for development
+  crates/native-host/    ldm-native-host: the browser bridge, and --register/--unregister
+  crates/testkit/        Test web server used by the Rust tests
+  extension/             Browser extension (Chrome-family and Firefox builds)
+  app-icon.png           App icon (drawn by extension/tools/make-icons.py)
 ```
 
-Still to come: `native-host/` (bridge between browser and app), `extension/` (Chrome, Edge, Firefox, Opera, Brave, Vivaldi), `app/` (Tauri desktop app), and the Windows installer.
+Still to come: `app/` (Tauri desktop app), the video grabber, queues and scheduler, and the Windows installer.
 
 ## Working on it
 
-You need [Rust](https://rustup.rs/) 1.85 or newer.
+You need [Rust](https://rustup.rs/) 1.85 or newer, and Node.js 22 or newer for the extension.
 
 ```bash
-cargo test -p ldm-engine
+cargo test --workspace
 ```
 
-The tests run a small HTTP server on your computer that can go slow, drop connections, refuse byte ranges, hide the file size and refuse links. They check every download is byte-for-byte correct, including with 8, 16, 32 and 64 parallel sections.
+Runs the engine, bridge and pipe tests. The engine tests use a small web server that can go slow, drop connections, refuse byte ranges, hide the file size and refuse links. They check every download is byte-for-byte correct, including with 8, 16, 32 and 64 parallel sections. The bridge tests run the real `ldm-native-host` program the way a browser does.
+
+```bash
+cd extension && npm test && npm run test:e2e
+```
+
+Unit tests for the capture rules, then an end-to-end test in a real Chromium with the extension, the bridge and the download manager.
+
+To try the extension against a running download manager without the desktop app:
+
+```bash
+cargo build -p ldm-native-host -p ldm-service
+```
+
+```bash
+target/debug/ldm-native-host --register
+```
+
+```bash
+target/debug/ldm-headless
+```
+
+Then load `extension/dist/chromium` as an unpacked extension (run `npm run build` in `extension/` first). Downloads are saved to a `layos-download-manager` folder in your temp folder.
 
 ## Licence
 

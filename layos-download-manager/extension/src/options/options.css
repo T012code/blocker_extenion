@@ -1,0 +1,19 @@
+main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; display: grid; gap: 12px; }
+header { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+header h1 { font-size: 22px; }
+header p { margin: 0; }
+h2 { font-size: 15px; margin-bottom: 8px; }
+form { display: grid; gap: 12px; }
+.status { display: flex; align-items: center; gap: 12px; }
+.grow { flex: 1; min-width: 0; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 0; cursor: pointer; }
+.row + .row { border-top: 1px solid var(--card-border); }
+.card > p { margin: 0 0 8px; }
+.card textarea + button { margin-top: 8px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+.grid h2, .grid .wide, .grid .row { grid-column: 1 / -1; }
+.grid label:not(.row) { display: grid; gap: 4px; align-content: start; }
+.grid .muted { font-size: 12px; }
+.saved { min-height: 1.4em; margin: 0; }
+ul { margin: 0; padding-left: 20px; }
+@media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
