@@ -1,0 +1,39 @@
+/* Layó's Download Manager colours, taken from layothedeveloper.com (anchor hue 263, cobalt).
+   Hex values are the site's oklch tokens converted to sRGB. Used by the extension and the app. */
+:root {
+  --paper: #f7fafe;          /* page background */
+  --surface: #e9f2fb;        /* raised areas, list hover */
+  --surface-strong: #d7e6f7; /* progress track, pressed */
+  --card: #ffffff;
+  --ink: #111a2f;            /* text */
+  --ink-muted: #545e6f;
+  --rule: rgb(17 26 47 / 0.1);
+  --accent: #2866ee;         /* cobalt: buttons, links, progress */
+  --accent-strong: #1b47d3;  /* hover */
+  --accent-soft: #d9ebff;    /* tinted boxes */
+  --accent-ink: #fafcfe;     /* text on accent */
+  --pop: #bef050;            /* lime spark: the section still downloading */
+  --pop-ink: #111a2f;
+  --danger: #c92f33;
+  --success: #14874e;
+  --warning: #bb7400;
+  --font: "Archivo", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #080e1b;
+    --surface: #0f1728;
+    --surface-strong: #192239;
+    --card: #0d1425;
+    --ink: #edf2f8;
+    --ink-muted: #9eacbe;
+    --rule: rgb(237 242 248 / 0.1);
+    --accent: #57a8ff;
+    --accent-strong: #78c6ff;
+    --accent-soft: #14274d;
+    --accent-ink: #080e1b;
+    --danger: #f97770;
+    --success: #5ccb89;
+    --warning: #e9b452;
+  }
+}

@@ -101,10 +101,16 @@ async fn forward(req: Request) -> Response {
             host_version: Some(HOST_VERSION.into()),
         },
         Ok(resp) => resp,
-        Err(IpcError::NotRunning) if !req.needs_app() => Response::Pong {
-            app_running: false,
-            app_version: None,
-            host_version: Some(HOST_VERSION.into()),
+        Err(IpcError::NotRunning) if !req.needs_app() => match req {
+            Request::List => Response::Downloads {
+                app_running: false,
+                items: Vec::new(),
+            },
+            _ => Response::Pong {
+                app_running: false,
+                app_version: None,
+                host_version: Some(HOST_VERSION.into()),
+            },
         },
         Err(IpcError::NotRunning) => {
             if let Err(e) = launch_app() {

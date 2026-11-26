@@ -1,5 +1,7 @@
 # Layó's Download Manager
 
+*Developed by [Layó](https://layothedeveloper.com)*
+
 A free download manager for Windows. It speeds up downloads by fetching each file in many sections at once, resumes broken downloads, catches downloads from your browser, and grabs videos from web pages.
 
 > **Status:** in development. The download engine, the browser extension and the browser bridge are done and tested. The desktop app, video grabber, queues and installer come next.
@@ -50,6 +52,12 @@ More sections help most on fast connections and servers that limit speed per con
 - Reads the file name from `Content-Disposition` (including UTF-8 names), then from the address, and makes it safe for Windows
 - Sorts files into Video, Music, Documents, Compressed, Programs and General folders
 
+## Pause and continue
+
+Any download can be paused and continued. Most servers allow fetching part of a file (byte ranges), so a paused download continues exactly where it stopped, even after closing the app or restarting the computer: the parts already on disk are kept in `name.ext.ldmpart` and their positions in the download database. Before downloading, the app asks the server whether it supports this. If it doesn't, the download is marked **Can't resume**, and continuing it starts the file again from the beginning.
+
+Until the desktop app is ready, the browser extension's toolbar pop-up lists your downloads with live progress, speed and time left, and has **Pause** and **Continue** buttons.
+
 ## Taking over browser downloads
 
 The browser extension (in [`extension/`](extension/)) watches downloads in Chrome, Edge, Opera, Brave, Vivaldi and Firefox. When you download a file of a type on its list (archives, programs, video, audio, documents), it cancels the browser's download and hands the link to the download manager, including the cookies, referrer and user agent, so downloads behind a login keep working. It leaves alone:
@@ -87,6 +95,7 @@ layos-download-manager/
   crates/native-host/    ldm-native-host: the browser bridge, and --register/--unregister
   crates/testkit/        Test web server used by the Rust tests
   extension/             Browser extension (Chrome-family and Firefox builds)
+  brand/                 Colours, fonts and Layó's logo from layothedeveloper.com
   app-icon.png           App icon (drawn by extension/tools/make-icons.py)
 ```
 

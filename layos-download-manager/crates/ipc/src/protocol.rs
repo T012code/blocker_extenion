@@ -59,12 +59,18 @@ pub enum Request {
     },
     /// Bring the app window to the front.
     ShowApp,
+    /// Current downloads with progress. Never starts the app.
+    List,
+    /// Pause a running download. It keeps what it has, if the server can resume.
+    Pause { id: i64 },
+    /// Continue a paused, failed or waiting download.
+    Resume { id: i64 },
 }
 
 impl Request {
     /// Whether the bridge should start the app to answer this.
     pub fn needs_app(&self) -> bool {
-        !matches!(self, Request::Ping)
+        !matches!(self, Request::Ping | Request::List)
     }
 }
 
@@ -82,9 +88,34 @@ pub enum Response {
         ids: Vec<i64>,
     },
     Ok,
+    #[serde(rename_all = "camelCase")]
+    Downloads {
+        app_running: bool,
+        items: Vec<DownloadSummary>,
+    },
     Error {
         message: String,
     },
+}
+
+/// A download as the browser extension shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadSummary {
+    pub id: i64,
+    pub file_name: String,
+    /// queued, connecting, downloading, paused, completed, failed or needsRefresh.
+    pub status: String,
+    pub size: Option<u64>,
+    pub downloaded: u64,
+    /// Bytes per second while downloading.
+    pub speed: u64,
+    /// The server supports byte ranges, so pausing keeps progress. When false, a paused
+    /// download starts again from the beginning.
+    pub resumable: bool,
+    /// Sections (connections) configured for it.
+    pub connections: u8,
+    pub error: Option<String>,
 }
 
 impl Response {

@@ -8,34 +8,44 @@
 </head>
 <body>
   <header>
-    <img src="../icons/icon-32.png" alt="" width="24" height="24">
+    <img src="../icons/icon-32.png" alt="" width="26" height="26">
     <h1>Layó's Download Manager</h1>
   </header>
 
-  <section class="card status" id="status">
-    <span class="dot" id="status-dot"></span>
-    <div>
-      <div id="status-title">Checking…</div>
-      <div class="muted small" id="status-detail"></div>
-    </div>
+  <section class="card status">
+    <span class="badge" id="status-badge">Checking</span>
+    <span class="muted small" id="status-detail"></span>
   </section>
 
   <label class="card row">
-    <div>
-      <div>Take over browser downloads</div>
-      <div class="muted small" id="bypass-hint">Hold Alt while clicking a link to skip</div>
-    </div>
-    <span class="switch"><input type="checkbox" id="enabled"><span></span></span>
+    <span>
+      <span class="label">Take over browser downloads</span>
+      <span class="muted small" id="bypass-hint">Hold Alt while clicking a link to skip</span>
+    </span>
+    <span class="switch"><input type="checkbox" id="enabled" aria-label="Take over browser downloads"><span></span></span>
   </label>
 
-  <section class="card recent">
-    <h2>Recent</h2>
-    <ul id="history"><li class="muted small">Nothing yet. Downloads you start in the browser will show up here.</li></ul>
+  <section class="card downloads" aria-labelledby="downloads-title">
+    <h2 id="downloads-title">Downloads</h2>
+    <ul id="downloads" aria-live="polite"></ul>
+    <p class="muted small empty" id="downloads-empty">Downloads you start will show up here, with pause and continue.</p>
+  </section>
+
+  <section class="card returned" id="returned" hidden>
+    <h2>Downloaded by the browser instead</h2>
+    <ul id="returned-list"></ul>
   </section>
 
   <footer>
-    <button class="primary" id="open-app">Open download manager</button>
-    <button id="options">Settings</button>
+    <div class="actions">
+      <button class="primary" id="open-app">Open download manager</button>
+      <button id="options">Settings</button>
+    </div>
+    <p class="credit">
+      <img class="mark-light" src="../brand/layo-mark-light.svg" alt="">
+      <img class="mark-dark" src="../brand/layo-mark-dark.svg" alt="">
+      <span>Developed by <a href="https://layothedeveloper.com" target="_blank" rel="noopener">Layó</a></span>
+    </p>
   </footer>
   <script type="module" src="popup.js"></script>
 </body>

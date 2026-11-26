@@ -212,3 +212,139 @@ fn build_headless() -> PathBuf {
         "ldm-headless"
     })
 }
+
+/// The extension can list downloads, pause one and continue it, all through the bridge.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn pause_and_continue_through_the_bridge() {
+    let data = test_data(4 * 1024 * 1024);
+    let server = TestServer::start(
+        data.clone(),
+        ServerOptions {
+            throttle: Some(300 * 1024),
+            ..Default::default()
+        },
+    )
+    .await;
+    let dir = tempfile::tempdir().unwrap();
+    let ipc = dir.path().join("ldm.sock").to_string_lossy().into_owned();
+    let mut cfg = EngineConfig::new(dir.path().join("Downloads"));
+    cfg.min_segment_size = 256 * 1024;
+    cfg.progress_interval = Duration::from_millis(100);
+    let engine = Engine::open(cfg).unwrap();
+    let service = Service::new(engine.clone(), Arc::new(NoFrontend));
+    let p = ipc.clone();
+    tokio::spawn(async move {
+        ldm_ipc::serve(&p, move |req| {
+            let s = service.clone();
+            async move { s.handle(req).await }
+        })
+        .await
+        .unwrap()
+    });
+    while !ldm_ipc::is_running(&ipc).await {
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let send = |msg: serde_json::Value| {
+        let ipc = ipc.clone();
+        async move {
+            tokio::task::spawn_blocking(move || talk(&ipc, &[], &[msg]).remove(0))
+                .await
+                .unwrap()
+        }
+    };
+    let list = || async {
+        match send(json!({"type": "list"})).await {
+            Response::Downloads {
+                app_running: true,
+                items,
+            } => items,
+            other => panic!("{other:?}"),
+        }
+    };
+
+    let url = server.url("/files/disk.iso");
+    let Response::Accepted { ids } =
+        send(json!({"type": "download", "ask": false, "items": [{"url": url}]})).await
+    else {
+        panic!()
+    };
+    let id = ids[0];
+
+    // Running: progress and speed show up, and the server can resume.
+    let mut running = None;
+    for _ in 0..100 {
+        let items = list().await;
+        if let Some(d) = items
+            .iter()
+            .find(|d| d.id == id && d.status == "downloading" && d.downloaded > 200_000)
+        {
+            running = Some(d.clone());
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    let running = running.expect("download should be listed as downloading");
+    assert!(running.resumable);
+    assert!(running.speed > 0, "{running:?}");
+    assert_eq!(running.file_name, "disk.iso");
+
+    // Pause keeps what was fetched.
+    assert_eq!(send(json!({"type": "pause", "id": id})).await, Response::Ok);
+    let paused = list().await.into_iter().find(|d| d.id == id).unwrap();
+    assert_eq!(paused.status, "paused");
+    assert!(paused.downloaded > 0 && paused.downloaded < data.len() as u64);
+    assert_eq!(paused.speed, 0);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(
+        list()
+            .await
+            .into_iter()
+            .find(|d| d.id == id)
+            .unwrap()
+            .downloaded,
+        paused.downloaded,
+        "nothing moves while paused"
+    );
+
+    // Continue finishes from where it stopped.
+    server.set_options(|o| o.throttle = None);
+    let before = server.state.ranges_seen.lock().unwrap().len();
+    assert_eq!(
+        send(json!({"type": "resume", "id": id})).await,
+        Response::Ok
+    );
+    wait_file(&dir.path().join("Downloads/Compressed/disk.iso"), &data).await;
+    let ranges = server.state.ranges_seen.lock().unwrap()[before..].to_vec();
+    assert!(
+        ranges
+            .iter()
+            .any(|r| r != "bytes=0-0" && !r.starts_with("bytes=0-")),
+        "should continue mid-file: {ranges:?}"
+    );
+    let done = list().await.into_iter().find(|d| d.id == id).unwrap();
+    assert_eq!(done.status, "completed");
+    assert_eq!(done.downloaded, data.len() as u64);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn list_without_app_does_not_start_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let ipc = dir
+        .path()
+        .join("nobody.sock")
+        .to_string_lossy()
+        .into_owned();
+    let marker = dir.path().join("started");
+    let replies = talk(
+        &ipc,
+        &[("LDM_APP_PATH", &marker)],
+        &[json!({"type": "list"})],
+    );
+    assert_eq!(
+        replies[0],
+        Response::Downloads {
+            app_running: false,
+            items: vec![]
+        }
+    );
+}

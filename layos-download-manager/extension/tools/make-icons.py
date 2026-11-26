@@ -8,7 +8,9 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent.parent
-TOP, BOTTOM = (37, 99, 235), (14, 165, 233)  # blue to sky
+# Colours from layothedeveloper.com: cobalt accent, deeper cobalt, lime spark.
+TOP, BOTTOM = (0x3a, 0x7a, 0xff), (0x1b, 0x47, 0xd3)
+LIME = (0xbe, 0xf0, 0x50, 255)
 
 
 def draw(size: int) -> Image.Image:
@@ -38,8 +40,8 @@ def draw(size: int) -> Image.Image:
     width = (right - left - 2 * gap) / 3
     for i in range(3):
         x0 = left + i * (width + gap)
-        alpha = 255 if i < 2 else 150  # the last section still downloading
-        d.rounded_rectangle([x0, top, x0 + width, bottom], radius=(bottom - top) / 2, fill=(255, 255, 255, alpha))
+        # The last section is the one still downloading: lime.
+        d.rounded_rectangle([x0, top, x0 + width, bottom], radius=(bottom - top) / 2, fill=white if i < 2 else LIME)
     return img.resize((size, size), Image.LANCZOS)
 
 

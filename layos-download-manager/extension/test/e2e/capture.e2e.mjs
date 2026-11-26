@@ -42,14 +42,19 @@ const files = {
   '/files/notes.txt': Buffer.from('just text\n'),
   '/get?id=7': bytes(2 * 1024 * 1024, 3),
   '/files/slow.zip': bytes(2 * 1024 * 1024, 4),
+  '/files/paced.iso': bytes(12 * 1024 * 1024, 5),
 };
+// Responses for these trickle out so there's time to pause them.
+const PACED = new Set(['/files/paced.iso']);
 let rangeRequests = 0;
+let pacing = true;
 const PAGE = `<!doctype html><title>Files</title>
 <a id="big" href="/files/big.zip">big.zip</a>
 <a id="video" href="/get?id=7">video via script</a>
 <a id="notes" href="/files/notes.txt" download>notes.txt</a>
 <a id="manual" href="/files/manual.zip">manual.zip</a>
 <a id="slow" href="/files/slow.zip">slow.zip</a>
+<a id="paced" href="/files/paced.iso">paced.iso</a>
 <script>
   // With ?auto, click the links one after another like a user would.
   if (location.search === '?auto') (async () => {
@@ -88,7 +93,7 @@ const site = createServer(async (req, res) => {
   }
   res.setHeader('content-length', b - a + 1);
   const part = body.subarray(a, b + 1);
-  if (req.url === '/files/slow.zip' && !m) {
+  if ((req.url === '/files/slow.zip' && !m) || (PACED.has(req.url) && pacing)) {
     // The browser's own request trickles, so it's still running when the backup hook looks.
     for (let i = 0; i < part.length && !res.destroyed; i += 64 * 1024) {
       res.write(part.subarray(i, i + 64 * 1024));
@@ -181,6 +186,34 @@ try {
   const list = await worker.evaluate(async () => (await chrome.downloads.search({})).length);
   assert.equal(list, 0, 'the browser\'s copy should be cancelled and erased');
   console.log('ok - backup hook takes over a download when automation controls the browser');
+
+  // ---- Part 3: pause and continue from the toolbar pop-up.
+  await page.click('#paced');
+  const popup = await managed.newPage();
+  await popup.setViewportSize({ width: 360, height: 640 });
+  await popup.goto(`chrome-extension://${EXTENSION_ID}/popup/popup.html`);
+  const item = popup.locator('.dl', { hasText: 'paced.iso' });
+  await item.getByRole('button', { name: 'Pause' }).waitFor({ timeout: 20_000 });
+  await popup.waitForFunction(() => /MB\/s|KB\/s/.test(document.querySelector('.dl .meta')?.textContent ?? ''), null, { timeout: 10_000 });
+  const shots = process.env.SCREENSHOT_DIR;
+  if (shots) await popup.screenshot({ path: join(shots, 'popup-downloading.png') });
+  await item.getByRole('button', { name: 'Pause' }).click();
+  await item.getByRole('button', { name: 'Continue' }).waitFor({ timeout: 10_000 });
+  const pausedText = await item.locator('.meta').textContent();
+  assert.match(pausedText, /^Paused · [\d.]+ (KB|MB) of 12 MB/);
+  await sleep(1500);
+  assert.equal(await item.locator('.meta').textContent(), pausedText, 'progress must not move while paused');
+  assert.ok(existsSync(saved('Compressed/paced.iso.ldmpart')), 'the part file is kept while paused');
+  if (shots) await popup.screenshot({ path: join(shots, 'popup-paused.png') });
+  console.log(`ok - Pause in the pop-up stops the download and keeps its progress (${pausedText})`);
+
+  pacing = false;
+  const before = rangeRequests;
+  await item.getByRole('button', { name: 'Continue' }).click();
+  assert.ok(await waitFor(saved('Compressed/paced.iso'), files['/files/paced.iso']), 'continue should finish the file');
+  assert.ok(rangeRequests > before, 'continuing asks only for the missing parts');
+  await popup.locator('.dl.completed', { hasText: 'paced.iso' }).waitFor({ timeout: 5_000 });
+  console.log('ok - Continue finishes the download from where it stopped, byte-for-byte correct');
 } catch (e) {
   failed = true;
   console.error('FAILED:', e);

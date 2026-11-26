@@ -279,7 +279,7 @@ mod tests {
                     Request::Download { items, .. } => Response::Accepted {
                         ids: (0..items.len() as i64).collect(),
                     },
-                    Request::ShowApp => Response::Ok,
+                    _ => Response::Ok,
                 }
             })
             .await

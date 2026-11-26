@@ -17,6 +17,13 @@ const store = process.argv.includes('--store');
 
 const base = JSON.parse(readFileSync(join(src, 'manifest.json'), 'utf8'));
 
+// The colours are kept in one place (../brand/tokens.css); make sure the copy here matches.
+const tokens = readFileSync(join(root, '..', 'brand', 'tokens.css'), 'utf8');
+if (readFileSync(join(src, 'brand', 'tokens.css'), 'utf8') !== tokens) {
+  writeFileSync(join(src, 'brand', 'tokens.css'), tokens);
+  console.log('updated src/brand/tokens.css from ../brand/tokens.css');
+}
+
 function chromium() {
   const m = structuredClone(base);
   if (store) delete m.key;

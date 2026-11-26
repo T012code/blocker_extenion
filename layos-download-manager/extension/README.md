@@ -28,7 +28,9 @@ If the app can't be reached when a download arrives, the extension gives the dow
 - **Download this video/audio with Layó's DM** on a video or audio player
 - **Download all links with Layó's DM** on a page or a text selection. Only links to file types in your list are sent, and the app shows them in a list to choose from.
 
-**Toolbar pop-up.** Shows whether the app is connected, has an on/off switch, and lists recent downloads, each marked *Sent* or *In browser*.
+**Toolbar pop-up.** Shows whether the app is connected and has an on/off switch. It lists your downloads with live progress, speed, time left and the number of sections, with **Pause** and **Continue** buttons. Downloads from servers that can't resume are marked *Can't resume*. It also lists any downloads that went back to the browser.
+
+**Look.** The colours, the Archivo font and the "Developed by Layó" credit (linking to [layothedeveloper.com](https://layothedeveloper.com)) come from the brand kit in `../brand/`. `src/brand/tokens.css` is a copy of `../brand/tokens.css`, and the build refreshes it if the two differ.
 
 ## How it talks to the app
 
@@ -86,6 +88,7 @@ End-to-end test in a real Chromium. Build the Rust programs first: run `cargo bu
 4. Alt+click stays in the browser
 5. Taken-over files never reach the browser's download folder
 6. The backup hook takes a download over when automation controls the browser's downloads
+7. **Pause** in the pop-up stops a download and keeps its progress, and **Continue** finishes it from where it stopped
 
 ## Files
 

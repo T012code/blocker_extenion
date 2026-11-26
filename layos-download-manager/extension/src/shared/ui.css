@@ -1,59 +1,75 @@
-/* Shared look for the pop-up and options page: Windows 11 style, light and dark. */
-:root {
-  color-scheme: light dark;
-  --bg: #f3f3f3;
-  --card: #ffffff;
-  --card-border: #e5e5e5;
-  --text: #1b1b1b;
-  --muted: #5f5f5f;
-  --accent: #1d5fd6;
-  --accent-text: #ffffff;
-  --ok: #0f7b0f;
-  --warn: #9d5d00;
-  --bad: #c42b1c;
-  --input: #ffffff;
-  --input-border: #d1d1d1;
-  --radius: 8px;
-  font: 14px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+/* Shared look for the pop-up and settings page, in the colours of layothedeveloper.com.
+   Colour tokens live in ../brand/tokens.css (a copy of layos-download-manager/brand/tokens.css). */
+@import url("../brand/tokens.css");
+
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  src: url("../brand/fonts/archivo-latin.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #202020;
-    --card: #2b2b2b;
-    --card-border: #3a3a3a;
-    --text: #f2f2f2;
-    --muted: #b5b5b5;
-    --accent: #5ca9ff;
-    --accent-text: #00264d;
-    --ok: #6ccb5f;
-    --warn: #fce100;
-    --bad: #ff99a4;
-    --input: #1f1f1f;
-    --input-border: #4a4a4a;
-  }
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  src: url("../brand/fonts/archivo-latin-ext.woff2") format("woff2-variations");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F,
+    U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
+
+:root { color-scheme: light dark; --radius-sm: 10px; --radius: 14px; }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text); }
-h1, h2 { font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif; font-weight: 600; margin: 0; }
-.card { background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius); padding: 14px 16px; }
-.muted { color: var(--muted); }
-button, .button {
-  font: inherit; border-radius: 6px; padding: 6px 14px; cursor: pointer;
-  border: 1px solid var(--input-border); background: var(--card); color: var(--text);
+body { margin: 0; background: var(--paper); color: var(--ink); font: 14px/1.5 var(--font); }
+h1, h2 { font-weight: 640; font-stretch: 112%; letter-spacing: -0.01em; margin: 0; }
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:hover { color: var(--accent-strong); }
+.card { background: var(--card); border: 1px solid var(--rule); border-radius: var(--radius); padding: 14px 16px; }
+.muted { color: var(--ink-muted); }
+button {
+  font: inherit; font-weight: 560; border-radius: 999px; padding: 6px 14px; cursor: pointer;
+  border: 1px solid var(--rule); background: var(--card); color: var(--ink);
+  transition: background-color 160ms, border-color 160ms, color 160ms;
 }
-button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
-button:hover { filter: brightness(0.96); }
-button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button:hover:not(:disabled) { background: var(--surface); }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+button.primary:hover:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); }
+button:disabled { opacity: 0.55; cursor: default; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 input[type=text], input[type=number], select, textarea {
-  font: inherit; color: var(--text); background: var(--input); border: 1px solid var(--input-border);
-  border-radius: 6px; padding: 6px 8px; width: 100%;
+  font: inherit; color: var(--ink); background: var(--paper); border: 1px solid var(--rule);
+  border-radius: var(--radius-sm); padding: 7px 10px; width: 100%;
 }
 textarea { resize: vertical; min-height: 70px; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13px; }
-.switch { position: relative; display: inline-block; width: 40px; height: 20px; flex: none; }
-.switch input { opacity: 0; width: 0; height: 0; }
-.switch span { position: absolute; inset: 0; border-radius: 10px; border: 1px solid var(--muted); background: transparent; transition: .15s; }
-.switch span::before { content: ""; position: absolute; width: 12px; height: 12px; left: 3px; top: 3px; border-radius: 50%; background: var(--muted); transition: .15s; }
+
+/* Toggle switch */
+.switch { position: relative; display: inline-block; width: 40px; height: 22px; flex: none; }
+.switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.switch span { position: absolute; inset: 0; border-radius: 11px; border: 1px solid var(--ink-muted); transition: 160ms; pointer-events: none; }
+.switch span::before { content: ""; position: absolute; width: 14px; height: 14px; left: 3px; top: 3px; border-radius: 50%; background: var(--ink-muted); transition: 160ms; }
 .switch input:checked + span { background: var(--accent); border-color: var(--accent); }
-.switch input:checked + span::before { transform: translateX(20px); background: var(--accent-text); }
-.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
-.dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--bad); }
+.switch input:checked + span::before { transform: translateX(18px); background: var(--accent-ink); }
+
+/* Status labels: tinted, outlined boxes (no status dots). */
+.badge {
+  display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; white-space: nowrap; border: 1px solid currentColor;
+}
+.badge.ok { color: var(--success); background: color-mix(in srgb, var(--success) 12%, transparent); }
+.badge.warn { color: var(--warning); background: color-mix(in srgb, var(--warning) 12%, transparent); }
+.badge.bad { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.badge.info { color: var(--accent); background: var(--accent-soft); }
+
+/* "Developed by Layó" credit */
+.credit { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-muted); }
+.credit img { width: 14px; height: 14px; }
+.credit .mark-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  .credit .mark-light { display: none; }
+  .credit .mark-dark { display: inline; }
+}
+.credit a { color: var(--ink); font-weight: 600; text-decoration: none; }
+.credit a:hover { color: var(--accent); text-decoration: underline; }

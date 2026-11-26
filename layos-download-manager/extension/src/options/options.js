@@ -41,15 +41,17 @@ $('reset-types').addEventListener('click', async () => {
 });
 
 function showHost(host) {
-  const dot = $('status-dot');
+  const badge = $('status-badge');
   if (host.installed) {
-    dot.className = 'dot ok';
+    badge.className = 'badge ok';
+    badge.textContent = host.appRunning ? 'Connected' : 'Installed';
     $('status-title').textContent = host.appRunning ? 'Connected to Layó\'s Download Manager' : 'Layó\'s Download Manager is installed';
     $('status-detail').textContent = host.appRunning
       ? `App ${host.appVersion ?? ''}, bridge ${host.hostVersion ?? ''}`
       : 'It starts by itself when a download comes in.';
   } else {
-    dot.className = 'dot bad';
+    badge.className = 'badge bad';
+    badge.textContent = 'Not installed';
     $('status-title').textContent = 'Layó\'s Download Manager is not installed';
     $('status-detail').textContent = 'Install the Windows app to use this extension. Until then the browser keeps handling downloads. '
       + (host.error ? `(${host.error})` : '');
@@ -58,6 +60,8 @@ function showHost(host) {
 
 $('recheck').addEventListener('click', async () => {
   $('status-title').textContent = 'Checking…';
+  $('status-badge').className = 'badge info';
+  $('status-badge').textContent = 'Checking';
   showHost(await api.runtime.sendMessage({ type: 'refresh' }));
 });
 
