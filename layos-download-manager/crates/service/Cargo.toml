@@ -18,6 +18,10 @@ tokio.workspace = true
 tracing.workspace = true
 serde_json.workspace = true
 serde.workspace = true
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+regex = "1"
+percent-encoding.workspace = true
+reqwest.workspace = true
 
 [dev-dependencies]
 ldm-testkit = { path = "../testkit" }

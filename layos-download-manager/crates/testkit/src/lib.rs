@@ -331,7 +331,17 @@ async fn serve_file(mut sock: TcpStream, dir: &std::path::Path) -> std::io::Resu
             .write_all(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
             .await;
     }
-    let Ok(body) = std::fs::read(dir.join(rel)) else {
+    // Folders are served by their index.html, like a real web server.
+    let mut file = dir.join(rel);
+    if file.is_dir() {
+        file = file.join("index.html");
+    }
+    let rel = if file.ends_with("index.html") {
+        "index.html"
+    } else {
+        rel
+    };
+    let Ok(body) = std::fs::read(&file) else {
         return sock
             .write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
             .await;

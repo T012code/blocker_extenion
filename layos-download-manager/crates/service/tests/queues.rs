@@ -152,3 +152,95 @@ async fn queues_are_saved() {
     assert_eq!(list.len(), 1);
     assert_eq!((list[0].name.as_str(), list[0].max_active), ("Evening", 4));
 }
+
+// ---------------------------------------------------------------- scheduler
+
+use ldm_service::queues::{Schedule, WhenDone};
+
+fn at(day: u32, hh: u32, mm: u32) -> chrono::NaiveDateTime {
+    // 2026-11-23 is a Monday.
+    chrono::NaiveDate::from_ymd_opt(2026, 11, 23 + day)
+        .unwrap()
+        .and_hms_opt(hh, mm, 5)
+        .unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn schedules_start_and_stop_queues_on_their_days() {
+    let (_dir, server, engine) = setup(50_000).await;
+    let queues = Queues::start(engine.clone());
+    let q = queues.create("Nightly", 1);
+    let id = add_waiting(&engine, server.url("/night.bin")).await;
+    queues.assign(&[id], Some(q.id)).unwrap();
+    queues
+        .set_schedule(
+            q.id,
+            Some(Schedule {
+                start: Some("22:30".into()),
+                stop: Some("06:00".into()),
+                days: vec![0, 1, 2, 3, 4],
+                when_done: WhenDone::Nothing,
+            }),
+        )
+        .unwrap();
+
+    queues.run_schedules(at(5, 22, 30)).await; // Saturday: not a scheduled day
+    assert!(!queues.list()[0].running);
+    queues.run_schedules(at(0, 22, 29)).await; // Monday, a minute early
+    assert!(!queues.list()[0].running);
+    queues.run_schedules(at(0, 22, 30)).await; // Monday 22:30
+    assert!(queues.list()[0].running);
+    until("the queue starts its download", || engine.is_running(id)).await;
+    queues.run_schedules(at(1, 6, 0)).await; // Tuesday 06:00
+    assert!(!queues.list()[0].running);
+    assert!(!engine.is_running(id));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_finished_queue_says_what_to_do_next() {
+    let (_dir, server, engine) = setup(2_000_000).await;
+    let queues = Queues::start(engine.clone());
+    let mut finished = queues.subscribe_finished();
+    let q = queues.create("Then sleep", 2);
+    queues
+        .set_schedule(
+            q.id,
+            Some(Schedule {
+                start: None,
+                stop: None,
+                days: vec![],
+                when_done: WhenDone::Sleep,
+            }),
+        )
+        .unwrap();
+    let a = add_waiting(&engine, server.url("/a.bin")).await;
+    queues.assign(&[a], Some(q.id)).unwrap();
+    queues.start_queue(q.id).unwrap();
+    let (done, action) = tokio::time::timeout(Duration::from_secs(20), finished.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(done.id, q.id);
+    assert_eq!(action, WhenDone::Sleep);
+    assert!(!queues.list()[0].running, "a finished queue stops itself");
+    assert_eq!(engine.get(a).unwrap().status, DownloadStatus::Completed);
+
+    // An empty queue that's started doesn't immediately count as "finished".
+    let empty = queues.create("Empty", 1);
+    queues.start_queue(empty.id).unwrap();
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    assert!(finished.try_recv().is_err());
+    assert!(
+        queues
+            .set_schedule(
+                empty.id,
+                Some(Schedule {
+                    start: Some("25:00".into()),
+                    stop: None,
+                    days: vec![],
+                    when_done: WhenDone::Nothing
+                })
+            )
+            .is_err()
+    );
+}

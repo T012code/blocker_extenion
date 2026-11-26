@@ -2790,6 +2790,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+ "windows-sys 0.61.2",
  "winreg",
 ]
 
@@ -2797,11 +2798,15 @@ dependencies = [
 name = "ldm-service"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "ldm-engine",
  "ldm-ipc",
  "ldm-media",
  "ldm-testkit",
  "ldm-torrent",
+ "percent-encoding",
+ "regex",
+ "reqwest",
  "serde",
  "serde_json",
  "tempfile",

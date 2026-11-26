@@ -3,6 +3,7 @@
 //! The desktop app and the headless runner both use [`Service`]. The app plugs in a
 //! [`Frontend`] that shows the "add download" window and brings itself to the front.
 
+pub mod grabber;
 pub mod queues;
 
 use std::collections::HashMap;
