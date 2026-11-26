@@ -388,6 +388,60 @@ try {
     assert.ok(await waitFor(saved('Video/Clip of the day.mp4'), clip), 'the video file should be saved, named after the page');
     console.log('ok - picking "Video file MP4" saves the video, named after the page title');
 
+    // Feeds (X, Instagram, Facebook, Reddit): the button shows over videos that sit under
+    // overlays or inside shadow DOM, and looks up the post the video is in, not the feed.
+    const clipUrl = '/clip-e2e.mp4'; // served on each fake site (https pages can't play http video)
+    const clipBytes = readFileSync(join(mediaDir, 'clip.mp4'));
+    await managed.route('**/clip-e2e.mp4', (route) => route.fulfill({ contentType: 'video/mp4', body: clipBytes }));
+    const video = (id) => `<div style="position:relative;width:480px;height:270px;margin:12px 0">
+      <video id="${id}" src="${clipUrl}" muted autoplay loop playsinline width="480" height="270"></video>
+      <div style="position:absolute;inset:0" aria-hidden="true"></div></div>`;
+    const feeds = [
+      ['https://x.com/home', `<title>Home / X</title>
+        <article><a href="/alice/status/111"><time>2h</time></a> ${video('a')} <a href="/alice/status/111/analytics">Views</a></article>
+        <article><a href="/bob/status/222?s=20"><time>1h</time></a> ${video('b')}</article>`, 'b', 'https://x.com/bob/status/222'],
+      ['https://www.instagram.com/', `<title>Instagram</title>
+        <article><a href="/p/AAA111/">post</a>${video('a')}</article><article><a href="/reel/BBB222/?igsh=x">reel</a>${video('b')}</article>`,
+        'b', 'https://www.instagram.com/reel/BBB222/'],
+      ['https://www.facebook.com/', `<title>Facebook</title>
+        <div role="article"><a href="https://www.facebook.com/watch/?v=987654&__cft__[0]=tracking">Watch</a>${video('a')}</div>`,
+        'a', 'https://www.facebook.com/watch/?v=987654'],
+      ['https://www.reddit.com/', `<title>Reddit</title>
+        <shreddit-post id="post" permalink="/r/videos/comments/abc12/a_title/"></shreddit-post>
+        <script>
+          const r = document.getElementById('post').attachShadow({ mode: 'open' });
+          r.innerHTML = ${JSON.stringify(video('a'))};
+        </script>`, null, 'https://www.reddit.com/r/videos/comments/abc12/a_title/'],
+    ];
+    for (const [pageUrl, body] of feeds) {
+      await managed.route(pageUrl, (route) => route.fulfill({ contentType: 'text/html', body: `<!doctype html><body style="margin:0">${body}</body>` }));
+    }
+    const fp = await managed.newPage();
+    await fp.setViewportSize({ width: 900, height: 700 });
+    const found = [];
+    for (const [pageUrl, , id, want] of feeds) {
+      await fp.goto(pageUrl);
+      const v = id ? fp.locator(`#${id}`) : fp.locator('shreddit-post video');
+      await v.waitFor();
+      await fp.waitForFunction((sel) => {
+        const el = sel ? document.querySelector(sel) : document.getElementById('post').shadowRoot.querySelector('video');
+        return el && el.readyState >= 2;
+      }, id ? `#${id}` : null);
+      const box = await v.boundingBox();
+      await fp.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await fp.mouse.move(box.x + box.width / 2 + 5, box.y + box.height / 2 + 5);
+      const btn = fp.locator('ldm-video-download').getByRole('button', { name: 'Download' });
+      await btn.waitFor({ timeout: 10_000 });
+      await btn.click();
+      await fp.locator('ldm-video-download .item', { hasText: 'Video file MP4' }).waitFor({ timeout: 10_000 });
+      const got = await fp.locator('ldm-video-download').getAttribute('data-page-url');
+      assert.equal(got, want, `on ${pageUrl} the menu should be for the post`);
+      found.push(new URL(pageUrl).host);
+      await fp.keyboard.press('Escape');
+    }
+    await fp.close();
+    console.log(`ok - the video button works under feed overlays and in shadow DOM, and finds the post (${found.join(', ')})`);
+
     if (process.env.LDM_YTDLP) {
       const hp = await managed.newPage();
       await hp.setViewportSize({ width: 900, height: 560 });

@@ -229,8 +229,8 @@ try {
       console.log('ok - dark mode renders');
     }
     // No pills: nothing may be capsule- or circle-shaped (corners of half the height or more).
-    for (const open of [null, '#btn-settings', '#btn-add']) {
-      if (open) await page.click(open);
+    for (const [open, dlg] of [[null], ['#btn-settings', '#dlg-settings'], ['#btn-add', '#dlg-add']]) {
+      if (open) { await page.click(open); await page.locator(`${dlg}[open]`).waitFor(); }
       const pills = await page.evaluate(() => {
         const out = [];
         for (const el of document.querySelectorAll('body *')) {
@@ -244,7 +244,7 @@ try {
         return out;
       });
       assert.deepEqual(pills, [], `pill-shaped elements: ${pills.join(', ')}`);
-      if (open) await page.keyboard.press('Escape');
+      if (open) { await page.keyboard.press('Escape'); await page.locator(`${dlg}[open]`).waitFor({ state: 'detached' }); }
     }
     console.log(`ok - no pill shapes anywhere (${scheme})`);
     assert.deepEqual(errors, [], 'no errors in the page');
@@ -322,7 +322,8 @@ async function layoutAndWindowTests() {
   for (const key of ['downloaded', 'added', 'finished', 'sections', 'queue', 'folder', 'address']) await page.locator(`th[data-key="${key}"]`).waitFor();
   const wide = await page.evaluate(() => { const l = document.getElementById('list'); l.scrollLeft = 400; return { sw: l.scrollWidth, cw: l.clientWidth, left: l.scrollLeft }; });
   assert.ok(wide.sw > wide.cw && wide.left > 0, JSON.stringify(wide));
-  assert.equal((await page.locator('#rows tr', { hasText: 'report-q3.pdf' }).locator('td').last().innerText()).trim(), 'files.example.net');
+  const addressAt = await page.$$eval('thead th[data-key]', (ths) => ths.findIndex((t) => t.dataset.key === 'address'));
+  assert.equal((await page.locator('#rows tr', { hasText: 'report-q3.pdf' }).locator('td').nth(addressAt).innerText()).trim(), 'files.example.net');
   console.log(`ok - all 14 columns can be shown, and the list scrolls sideways (${wide.sw}px in ${wide.cw}px)`);
 
   // Resize a column by dragging its edge.
@@ -394,6 +395,104 @@ async function layoutAndWindowTests() {
   assert.equal(saved.showProgressWindow, true);
   console.log('ok - download windows, the "done" window and the mini window can each be turned off');
 
+  // The full name shows in the side bar, at its default width and at its narrowest.
+  const brandFits = () => page.evaluate(() => [...document.querySelectorAll('.brand .label > span')].map((sp) => sp.scrollWidth <= sp.clientWidth && sp.getBoundingClientRect().width > 0));
+  assert.deepEqual(await brandFits(), [true, true]);
+  await page.evaluate(() => { localStorage.setItem('ldm.layout.v1', JSON.stringify({ sidebar: 150 })); });
+  await page.reload();
+  await page.locator('#rows tr').first().waitFor();
+  assert.deepEqual(await brandFits(), [true, true], 'name fits at the narrowest side bar');
+  assert.deepEqual(await page.$$eval('.brand .label > span', (s) => s.map((x) => x.textContent)), ['Layó\'s', 'Download Manager']);
+  console.log('ok - "Layó\'s Download Manager" shows in full in the side bar, even at its narrowest');
+
+  // Tooltips name the icon buttons, with their shortcuts; plain labelled items get none.
+  const tipFor = async (sel) => {
+    await page.mouse.move(5, 790);
+    await page.locator('#tooltip').waitFor({ state: 'hidden' }).catch(() => {});
+    await page.hover(sel);
+    await page.locator('#tooltip:not([hidden])').waitFor({ timeout: 3000 });
+    return page.locator('#tooltip').innerText();
+  };
+  assert.equal(await tipFor('#btn-columns'), 'Choose columns');
+  assert.match(await tipFor('#btn-details'), /^Hide the details panel\s*Ctrl\+J$/);
+  assert.match(await tipFor('#btn-settings'), /^Settings\s*Ctrl\+,$/);
+  await page.locator('#rows tr', { hasText: 'ubuntu' }).click();
+  assert.match(await tipFor('#d-window'), /Show this download's window/);
+  assert.match(await tipFor('#d-copy'), /Copy the download address/);
+  await page.mouse.move(5, 790);
+  await page.hover('.nav-item[data-filter="music"]');
+  await page.waitForTimeout(800);
+  assert.equal(await page.isHidden('#tooltip'), true, 'no tooltip repeating a visible label');
+  if (shots) { await page.hover('#btn-columns'); await page.locator('#tooltip:not([hidden])').waitFor(); await page.screenshot({ path: join(shots, 'app-tooltip.png') }); }
+  console.log('ok - tooltips name the toolbar and details icons (with shortcuts), and stay away from visible labels');
+
+  // The side bar button is at the bottom of the side bar, says what it does, and shows names as tooltips when folded.
+  assert.equal((await page.locator('#btn-sidebar').innerText()).trim(), 'Hide side bar');
+  await page.click('#btn-sidebar');
+  await page.waitForFunction(() => document.getElementById('sidebar').getBoundingClientRect().width < 60);
+  assert.equal(await page.getAttribute('#btn-sidebar', 'aria-expanded'), 'false');
+  assert.match(await tipFor('.nav-item[data-filter="music"]'), /^Music$/);
+  assert.equal(await page.getAttribute('#tooltip', 'data-side'), 'right');
+  assert.match(await tipFor('#btn-sidebar'), /Show the side bar/);
+  await page.click('#btn-sidebar');
+  await page.waitForFunction(() => document.getElementById('sidebar').getBoundingClientRect().width > 190);
+  console.log('ok - "Hide side bar" sits at the bottom of the side bar; folded, its items show their names on hover');
+
+  // Columns: Name can be made narrower; any column can be dragged to a new place.
+  await page.evaluate(() => localStorage.removeItem('ldm.table.v1'));
+  await page.reload();
+  await page.locator('#rows tr').first().waitFor();
+  // Let the page settle (fonts, first layout) before dragging.
+  await page.waitForFunction(() => document.fonts.status === 'loaded' && !document.body.classList.contains('layout-init'));
+  await page.waitForTimeout(300);
+  const nameW = () => page.evaluate(() => document.querySelector('th[data-key="name"]').getBoundingClientRect().width);
+  const n0 = await nameW();
+  const ng = await page.locator('th[data-key="name"] .col-resize').boundingBox();
+  await page.mouse.move(ng.x + ng.width / 2, ng.y + ng.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(ng.x - 150, ng.y + ng.height / 2, { steps: 5 });
+  await page.mouse.up();
+  const n1 = await nameW();
+  assert.ok(n0 - n1 > 140, `Name ${n0} -> ${n1}`);
+  console.log(`ok - every column can be made narrower, Name too (${Math.round(n0)} -> ${Math.round(n1)}px)`);
+  const order = () => page.$$eval('thead th[data-key]', (ths) => ths.map((t) => t.dataset.key));
+  const sizeH = await page.locator('th[data-key="size"] .th-button').boundingBox();
+  const typeH = await page.locator('th[data-key="type"] .th-button').boundingBox();
+  await page.mouse.move(sizeH.x + sizeH.width / 2, sizeH.y + sizeH.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(sizeH.x - 40, sizeH.y + 10, { steps: 4 });
+  await page.mouse.move(typeH.x + 4, typeH.y + 10, { steps: 6 });
+  await page.locator('.col-drop').waitFor();
+  if (shots) await page.screenshot({ path: join(shots, 'app-column-move.png') });
+  await page.mouse.up();
+  assert.deepEqual((await order()).slice(0, 3), ['size', 'type', 'name']);
+  assert.equal(await page.getAttribute('th[data-key="size"]', 'aria-sort'), 'none', 'dragging a header does not sort');
+  assert.equal(await page.locator('#rows tr', { hasText: 'report-q3.pdf' }).locator('td').nth(0).innerText(), '3.2 MB', 'cells moved with their header');
+  await page.focus('th[data-key="size"] .th-button');
+  await page.keyboard.press('Alt+ArrowRight');
+  assert.deepEqual((await order()).slice(0, 3), ['type', 'size', 'name']);
+  await page.reload();
+  await page.locator('#rows tr').first().waitFor();
+  assert.deepEqual((await order()).slice(0, 3), ['type', 'size', 'name'], 'the order is remembered');
+  console.log('ok - columns move by dragging their header (or Alt+←/→), and the order is remembered');
+
+  // Exit: the Exit button (or Ctrl+Q) closes the app; with downloads running it asks first.
+  await page.evaluate(() => { window.__ldmCalls.length = 0; });
+  await page.click('#btn-exit');
+  await page.locator('#dlg-exit[open]').waitFor();
+  assert.match(await page.locator('#exit-text').innerText(), /running/);
+  await page.getByRole('button', { name: 'Keep running' }).click();
+  await page.locator('#dlg-exit[open]').waitFor({ state: 'detached' });
+  assert.equal(await page.evaluate(() => window.__ldmCalls.some((c) => c.cmd === 'exit_app')), false);
+  await page.keyboard.press('Control+q');
+  await page.locator('#dlg-exit[open]').waitFor();
+  await page.click('#exit-ok');
+  await page.waitForFunction(() => window.__ldmCalls.some((c) => c.cmd === 'exit_app'));
+  console.log('ok - Exit (and Ctrl+Q) exits, asking first while downloads run');
+  await page.reload();
+  await page.locator('#rows tr').first().waitFor();
+  await page.evaluate(() => { window.__ldmCalls.length = 0; });
+
   // The folder field: automatic by default, Choose… picks a folder, × goes back.
   await page.click('#btn-add');
   await page.locator('#dlg-add[open]').waitFor();
@@ -416,7 +515,7 @@ async function layoutAndWindowTests() {
   // Refresh an expired link: Continue on it tries the link, opens its page and waits.
   await page.locator('#rows tr', { hasText: 'setup.exe' }).click();
   await page.locator('#d-refresh:not([hidden])').waitFor();
-  assert.equal(await page.isHidden('#d-open'), true);
+  assert.equal(await page.locator('#d-open').count(), 0, 'no Open button in the details');
   await page.click('#btn-resume');
   await page.locator('#dlg-refresh[open]').waitFor();
   await page.locator('#refresh-waiting:not([hidden])', { hasText: 'dl.example.com' }).waitFor();

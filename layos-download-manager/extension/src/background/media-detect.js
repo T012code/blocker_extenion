@@ -24,6 +24,8 @@ export function classify({ url, mime, size }) {
   if (SEGMENT_EXTS.has(ext) || SEGMENT_MIMES.includes(m)) return null;
   // Sites that stream in byte-range pieces (YouTube and friends) put the range in the address.
   if (/[?&](range|rn|rbuf)=|\/range\/\d/i.test(url)) return null;
+  // Facebook and Instagram fetch each stream in byte ranges named in the address.
+  if (/[?&](bytestart|byteend)=/i.test(url)) return null;
   const media = m.startsWith('video/') || m.startsWith('audio/') || FILE_EXTS.has(ext);
   if (!media) return null;
   if (Number.isFinite(size) && size >= 0 && size < MIN_FILE_BYTES) return null;

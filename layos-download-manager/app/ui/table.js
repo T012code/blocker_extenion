@@ -53,7 +53,7 @@ const host = (url) => { try { return new URL(url).host; } catch { return ''; } }
  * `ctx` carries progressOf(d), queueName(id) and isActive(status).
  */
 export const COLUMNS = [
-  { key: 'type', label: 'Type', width: 92, text: (d) => typeOf(d).label, sort: (d) => typeOf(d).label,
+  { key: 'type', label: 'Type', width: 92, min: 56, text: (d) => typeOf(d).label, sort: (d) => typeOf(d).label,
     render: (td, d) => {
       const t = typeOf(d);
       const s = document.createElement('span');
@@ -61,9 +61,9 @@ export const COLUMNS = [
       s.append(icon(t.icon), t.label);
       td.replaceChildren(s);
     } },
-  { key: 'name', label: 'Name', width: 300, min: 140, flex: true, text: (d) => d.fileName, sort: (d) => d.fileName.toLowerCase() },
+  { key: 'name', label: 'Name', width: 320, min: 80, text: (d) => d.fileName, sort: (d) => d.fileName.toLowerCase() },
   { key: 'size', label: 'Size', width: 92, align: 'end', text: (d, c) => (c.progressOf(d).size ? bytes(c.progressOf(d).size) : ''), sort: (d, c) => c.progressOf(d).size ?? -1 },
-  { key: 'progress', label: 'Progress', width: 200, min: 120, sort: (d, c) => fraction(d, c),
+  { key: 'progress', label: 'Progress', width: 200, min: 72, sort: (d, c) => fraction(d, c),
     text: (d, c) => String(Math.round(fraction(d, c) * 1000)) + d.status,
     render: (td, d, c) => {
       if (!td.firstChild) td.innerHTML = '<div class="progress"><div class="bar"><span></span></div><span class="pct"></span></div>';
@@ -99,12 +99,20 @@ function fraction(d, c) {
   return p.size > 0 ? Math.min(1, p.done / p.size) : 0;
 }
 
+const ALL_KEYS = COLUMNS.map((c) => c.key);
+const MIN_WIDTH = 44;
+
 function loadPrefs() {
   try {
     const p = JSON.parse(localStorage.getItem(PREFS_KEY) ?? 'null');
-    if (p && Array.isArray(p.visible)) return p;
+    if (p && Array.isArray(p.visible)) {
+      // Column order: saved order, then any columns added since.
+      const order = (Array.isArray(p.order) ? p.order : []).filter((k) => ALL_KEYS.includes(k));
+      p.order = [...order, ...ALL_KEYS.filter((k) => !order.includes(k))];
+      return p;
+    }
   } catch { /* storage unavailable: defaults */ }
-  return { visible: [...DEFAULT_VISIBLE], widths: {}, sort: { key: null, dir: 1 } };
+  return { visible: [...DEFAULT_VISIBLE], order: [...ALL_KEYS], widths: {}, sort: { key: null, dir: 1 } };
 }
 
 export class DownloadTable {
@@ -127,25 +135,34 @@ export class DownloadTable {
     try { localStorage.setItem(PREFS_KEY, JSON.stringify(this.prefs)); } catch { /* fine */ }
   }
 
+  /** Shown columns, in the user's order. Name is always there. */
   get columns() {
-    return COLUMNS.filter((c) => this.prefs.visible.includes(c.key) || c.key === 'name');
+    return this.prefs.order
+      .map((k) => COLUMNS.find((c) => c.key === k))
+      .filter((c) => c && (this.prefs.visible.includes(c.key) || c.key === 'name'));
   }
 
   width(col) {
     return this.prefs.widths[col.key] ?? col.width;
   }
 
-  /** Header cells, column widths, sort arrows and resize handles. */
+  /** Every column keeps exactly its width; an empty last column takes any space left. */
+  sizeTable() {
+    this.table.style.width = `${this.columns.reduce((n, c) => n + this.width(c), 0)}px`;
+  }
+
+  /** Header cells, column widths, sort arrows, resize handles and dragging to reorder. */
   buildHead(resetRows = true) {
     const cols = this.columns;
     this.colgroup.replaceChildren(...cols.map((c) => {
       const col = document.createElement('col');
-      if (!c.flex) col.style.width = `${this.width(c)}px`;
+      col.style.width = `${this.width(c)}px`;
       return col;
-    }));
-    // Name takes what's left, but never less than its own width: wider sets scroll sideways.
-    const total = cols.reduce((n, c) => n + this.width(c), 0);
-    this.table.style.width = `${total}px`;
+    }), document.createElement('col'));
+    this.sizeTable();
+    const filler = document.createElement('th');
+    filler.className = 'filler';
+    filler.setAttribute('aria-hidden', 'true');
     this.headRow.replaceChildren(...cols.map((c) => {
       const th = document.createElement('th');
       th.scope = 'col';
@@ -156,15 +173,28 @@ export class DownloadTable {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'th-button';
-      b.append(c.label);
+      b.append(Object.assign(document.createElement('span'), { className: 'th-label', textContent: c.label }));
       if (sorted) b.append(icon(this.prefs.sort.dir > 0 ? 'arrow-up' : 'arrow-down', { size: 14 }));
-      b.title = `Sort by ${c.label.toLowerCase()}`;
-      b.addEventListener('click', () => this.sortBy(c.key));
+      b.title = `Sort by ${c.label.toLowerCase()}, or drag to move`;
+      b.addEventListener('click', (e) => {
+        if (this.justDragged) { e.preventDefault(); this.justDragged = false; return; }
+        this.sortBy(c.key);
+      });
+      b.addEventListener('pointerdown', (e) => this.startMove(e, c, th));
+      b.addEventListener('keydown', (e) => {
+        if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+          e.preventDefault();
+          const at = this.columns.indexOf(c);
+          this.moveColumn(c.key, at + (e.key === 'ArrowRight' ? 1 : -1));
+          this.headRow.querySelector(`th[data-key="${c.key}"] .th-button`)?.focus();
+        }
+      });
       const grip = document.createElement('span');
       grip.className = 'col-resize';
       grip.setAttribute('role', 'separator');
       grip.setAttribute('aria-orientation', 'vertical');
       grip.setAttribute('aria-label', `Resize ${c.label} column`);
+      grip.title = `Drag to resize ${c.label.toLowerCase()}; double-click to reset`;
       grip.tabIndex = 0;
       grip.addEventListener('pointerdown', (e) => this.startResize(e, c));
       grip.addEventListener('keydown', (e) => {
@@ -173,10 +203,10 @@ export class DownloadTable {
           this.setWidth(c, this.width(c) + (e.key === 'ArrowRight' ? 16 : -16));
         }
       });
-      grip.addEventListener('dblclick', () => { delete this.prefs.widths[c.key]; this.save(); this.buildHead(); });
+      grip.addEventListener('dblclick', () => { delete this.prefs.widths[c.key]; this.save(); this.buildHead(false); this.resizeCols(); });
       th.append(b, grip);
       return th;
-    }));
+    }), filler);
     if (!resetRows) return;
     // Rows must be rebuilt to match the columns (without the entrance animation).
     this.tbody.replaceChildren();
@@ -184,20 +214,22 @@ export class DownloadTable {
     this.firstPaint = true;
   }
 
+  resizeCols() {
+    this.columns.forEach((c, i) => { this.colgroup.children[i].style.width = `${this.width(c)}px`; });
+    this.sizeTable();
+  }
+
   setWidth(col, w) {
-    this.prefs.widths[col.key] = Math.max(col.min ?? 64, Math.min(640, Math.round(w)));
+    this.prefs.widths[col.key] = Math.max(col.min ?? MIN_WIDTH, Math.min(800, Math.round(w)));
     this.save();
-    const cols = this.columns;
-    const i = cols.indexOf(col);
-    if (!col.flex) this.colgroup.children[i].style.width = `${this.width(col)}px`;
-    this.table.style.width = `${cols.reduce((n, c) => n + this.width(c), 0)}px`;
+    this.resizeCols();
   }
 
   startResize(e, col) {
     e.preventDefault();
     e.stopPropagation();
     const startX = e.clientX;
-    const startW = col.flex ? this.headRow.querySelector(`th[data-key="${col.key}"]`).getBoundingClientRect().width : this.width(col);
+    const startW = this.width(col);
     const grip = e.currentTarget;
     grip.setPointerCapture(e.pointerId);
     document.body.classList.add('resizing-x');
@@ -205,10 +237,82 @@ export class DownloadTable {
     const up = () => {
       grip.removeEventListener('pointermove', move);
       grip.removeEventListener('pointerup', up);
+      grip.removeEventListener('pointercancel', up);
       document.body.classList.remove('resizing-x');
     };
     grip.addEventListener('pointermove', move);
     grip.addEventListener('pointerup', up);
+    grip.addEventListener('pointercancel', up);
+  }
+
+  /** Moves a column to position `to` among the shown columns. */
+  moveColumn(key, to) {
+    const shown = this.columns.map((c) => c.key);
+    const from = shown.indexOf(key);
+    to = Math.max(0, Math.min(shown.length - 1, to));
+    if (from < 0 || from === to) return;
+    shown.splice(from, 1);
+    shown.splice(to, 0, key);
+    // Hidden columns keep their places relative to the others.
+    const hidden = this.prefs.order.filter((k) => !shown.includes(k));
+    this.prefs.order = [...shown, ...hidden];
+    this.save();
+    this.buildHead();
+    this.onChange();
+  }
+
+  /** Dragging a header left or right moves its column; a short press still sorts. */
+  startMove(e, col, th) {
+    if (e.button !== 0) return;
+    const startX = e.clientX;
+    const button = e.currentTarget;
+    let dragging = false;
+    let marker = null;
+    let to = 0;
+    const heads = () => [...this.headRow.querySelectorAll('th[data-key]')];
+    // Follow the pointer even once it leaves the header (a plain click still sorts).
+    button.setPointerCapture(e.pointerId);
+    const move = (ev) => {
+      const dx = ev.clientX - startX;
+      if (!dragging) {
+        if (Math.abs(dx) < 6) return;
+        dragging = true;
+        th.classList.add('moving');
+        document.body.classList.add('moving-col');
+        marker = document.createElement('div');
+        marker.className = 'col-drop';
+        this.table.closest('.list').append(marker);
+      }
+      th.style.transform = `translateX(${dx}px)`;
+      // Where it would land: before the first header whose middle is right of the pointer.
+      const all = heads();
+      const others = all.filter((h) => h !== th);
+      let before = others.findIndex((h) => { const r = h.getBoundingClientRect(); return ev.clientX < r.left + r.width / 2; });
+      if (before < 0) before = others.length;
+      to = before;
+      const list = this.table.closest('.list');
+      const lr = list.getBoundingClientRect();
+      const edge = before < others.length ? others[before].getBoundingClientRect().left : others[others.length - 1].getBoundingClientRect().right;
+      marker.style.left = `${edge - lr.left + list.scrollLeft - 1}px`;
+      marker.style.top = `${list.scrollTop}px`;
+      marker.style.height = `${list.clientHeight}px`;
+    };
+    const up = () => {
+      button.removeEventListener('pointermove', move);
+      button.removeEventListener('pointerup', up);
+      button.removeEventListener('pointercancel', up);
+      if (!dragging) return;
+      this.justDragged = true;
+      setTimeout(() => { this.justDragged = false; }, 0);
+      th.classList.remove('moving');
+      th.style.transform = '';
+      marker?.remove();
+      document.body.classList.remove('moving-col');
+      this.moveColumn(col.key, to);
+    };
+    button.addEventListener('pointermove', move);
+    button.addEventListener('pointerup', up);
+    button.addEventListener('pointercancel', up);
   }
 
   sortBy(key) {
@@ -224,14 +328,14 @@ export class DownloadTable {
   toggleColumn(key) {
     if (key === 'name') return;
     const v = this.prefs.visible;
-    this.prefs.visible = v.includes(key) ? v.filter((k) => k !== key) : COLUMNS.map((c) => c.key).filter((k) => k === key || v.includes(k));
+    this.prefs.visible = v.includes(key) ? v.filter((k) => k !== key) : [...v, key];
     this.save();
     this.buildHead();
     this.onChange();
   }
 
   resetColumns() {
-    this.prefs = { visible: [...DEFAULT_VISIBLE], widths: {}, sort: { key: null, dir: 1 } };
+    this.prefs = { visible: [...DEFAULT_VISIBLE], order: [...ALL_KEYS], widths: {}, sort: { key: null, dir: 1 } };
     this.save();
     this.buildHead();
     this.onChange();
@@ -266,6 +370,7 @@ export class DownloadTable {
           if (c.align === 'end') td.classList.add('end');
           tr.append(td);
         }
+        tr.append(Object.assign(document.createElement('td'), { className: 'filler' }));
         if (!this.firstPaint) tr.classList.add('enter');
         this.rows.set(d.id, tr);
       }

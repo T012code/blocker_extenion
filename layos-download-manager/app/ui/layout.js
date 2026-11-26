@@ -2,7 +2,7 @@
 // (Ctrl+B, Ctrl+J) or dragged to any size. Sizes are remembered.
 
 const KEY = 'ldm.layout.v1';
-const SIDEBAR = { min: 180, max: 420, def: 232, rail: 56 };
+const SIDEBAR = { min: 220, max: 420, def: 232, rail: 56 };
 const DETAILS = { min: 140, def: 248, bar: 48 };
 
 function load() {
@@ -17,6 +17,9 @@ export function initLayout() {
   const app = document.getElementById('app');
   const main = document.getElementById('main');
   const s = load();
+  // Sizes saved by an older version (or a bad value) are brought within limits.
+  s.sidebar = Math.round(Math.min(SIDEBAR.max, Math.max(SIDEBAR.min, Number(s.sidebar) || SIDEBAR.def)));
+  s.details = Math.round(Math.max(DETAILS.min, Number(s.details) || DETAILS.def));
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* fine */ } };
 
   const detailsMax = () => Math.max(DETAILS.min, main.clientHeight - 180);
@@ -28,6 +31,7 @@ export function initLayout() {
     const sb = document.getElementById('btn-sidebar');
     sb.setAttribute('aria-expanded', String(!s.sidebarCollapsed));
     sb.title = s.sidebarCollapsed ? 'Show the side bar (Ctrl+B)' : 'Hide the side bar (Ctrl+B)';
+    sb.querySelector('.label').textContent = s.sidebarCollapsed ? 'Show side bar' : 'Hide side bar';
     const split = document.getElementById('split-sidebar');
     split.setAttribute('aria-valuenow', String(s.sidebarCollapsed ? SIDEBAR.rail : s.sidebar));
     split.setAttribute('aria-valuemin', String(SIDEBAR.rail));
@@ -35,7 +39,7 @@ export function initLayout() {
     for (const id of ['btn-details', 'details-toggle']) {
       const b = document.getElementById(id);
       b.setAttribute('aria-expanded', String(!s.detailsCollapsed));
-      b.title = s.detailsCollapsed ? 'Show details (Ctrl+J)' : 'Hide details (Ctrl+J)';
+      b.title = s.detailsCollapsed ? 'Show the details panel (Ctrl+J)' : 'Hide the details panel (Ctrl+J)';
     }
     document.getElementById('details-body').inert = s.detailsCollapsed;
   };

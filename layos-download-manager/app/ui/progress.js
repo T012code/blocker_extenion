@@ -6,6 +6,7 @@ import { invoke, isMock, listen, windowLabel } from './backend.js';
 import { STATUS_TEXT, action, bytes, eta, percent, speed } from './format.js';
 import { hydrateIcons, icon } from './icons.js';
 import { renderMap } from './sectionmap.js';
+import { initTooltips } from './tooltip.js';
 import { statusEl } from './table.js';
 
 const $ = (id) => document.getElementById(id);
@@ -142,6 +143,7 @@ function setCompact(on) {
 
 async function start() {
   hydrateIcons();
+  initTooltips();
   setCompact(compact);
   new ResizeObserver(fit).observe($('win'));
   try {

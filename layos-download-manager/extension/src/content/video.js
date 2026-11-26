@@ -107,13 +107,82 @@
   let hideTimer = 0;
   let menuOpen = false;
 
+  const bigEnough = (v) => {
+    const r = v.getBoundingClientRect();
+    return r.width >= MIN_W && r.height >= MIN_H;
+  };
+
+  /**
+   * The video under the pointer, even beneath the overlays that feeds put on top
+   * (Facebook, X, Instagram…) and inside players built with shadow DOM.
+   */
   function videoAt(x, y) {
+    const search = (scope, depth) => {
+      for (const el of scope.elementsFromPoint(x, y)) {
+        if (el === host) continue;
+        if (el instanceof HTMLVideoElement) return bigEnough(el) ? el : null;
+        if (el.shadowRoot && depth < 4 && el.shadowRoot !== scope) {
+          const inner = search(el.shadowRoot, depth + 1);
+          if (inner) return inner;
+        }
+      }
+      return null;
+    };
+    const hit = search(document, 0);
+    if (hit) return hit;
+    // A video the browser doesn't hit-test (pointer-events: none): check the boxes.
     for (const v of document.querySelectorAll('video')) {
+      if (!bigEnough(v)) continue;
       const r = v.getBoundingClientRect();
-      if (r.width < MIN_W || r.height < MIN_H) continue;
       if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return v;
     }
     return null;
+  }
+
+  // ---- Which post a video belongs to
+  // In a feed, the page address is the feed, not the video. Find the post's own link
+  // (its permalink) near the video, so the app looks up the right one.
+
+  const PERMALINK = /\/status(?:es)?\/\d+|\/(?:p|reel|reels|tv)\/[\w-]+|\/videos?\/[\w.-]+|\/watch\/?\?(?:.*&)?v=|\/shorts\/[\w-]+|\/comments\/\w+|\/video\/\d+|\/story\.php\?|\/permalink\//i;
+
+  /** A post link without tracking extras: only what names the post is kept. */
+  function cleanPermalink(href) {
+    let u;
+    try { u = new URL(href, location.href); } catch { return null; }
+    if (!/^https?:$/.test(u.protocol)) return null;
+    const where = u.pathname + u.search;
+    if (!PERMALINK.test(where)) return null;
+    u.hash = '';
+    const status = /^(.*?\/status(?:es)?\/\d+)/.exec(u.pathname);
+    if (status) { u.pathname = status[1]; u.search = ''; return u.href; }
+    const keep = /\/watch\/?$/.test(u.pathname) ? ['v'] : /story\.php$/.test(u.pathname) ? ['story_fbid', 'id'] : [];
+    const params = new URLSearchParams();
+    for (const k of keep) if (u.searchParams.has(k)) params.set(k, u.searchParams.get(k));
+    u.search = params.toString();
+    return u.href;
+  }
+
+  function postUrlFor(video) {
+    let el = video;
+    for (let depth = 0; depth < 30; depth++) {
+      el = el.parentElement ?? (el.getRootNode() instanceof ShadowRoot ? el.getRootNode().host : null);
+      if (!el || el === document.body || el === document.documentElement) break;
+      // Reddit's post element says it outright.
+      const own = el.getAttribute('permalink');
+      if (own && cleanPermalink(own)) return cleanPermalink(own);
+      const links = [];
+      for (const a of el.querySelectorAll('a[href]')) {
+        const u = cleanPermalink(a.getAttribute('href'));
+        if (u && !links.includes(u)) links.push(u);
+        if (links.length > 3) break;
+      }
+      if (!links.length) continue;
+      // Several posts' links and several videos: this is the feed, not the post.
+      if (links.length > 1 && el.querySelectorAll('video').length > 1) break;
+      // The first link in the post is its own (a quoted post comes later).
+      return links[0];
+    }
+    return location.href;
   }
 
   function place() {
@@ -198,7 +267,7 @@
       for (const x of menu.querySelectorAll('.item')) x.disabled = true;
       setStatus('Sending to Layó\'s Download Manager…');
       try {
-        const r = await api.runtime.sendMessage({ type: 'videoDownload', choice, title, pageUrl: location.href });
+        const r = await api.runtime.sendMessage({ type: 'videoDownload', choice, title, pageUrl: host.dataset.pageUrl || location.href });
         if (!r?.ok) throw new Error(r?.error || 'it could not be sent');
         setStatus('Downloading in Layó\'s Download Manager', 'ok');
         setTimeout(() => { closeMenu(); hide(true); }, 1400);
@@ -240,7 +309,9 @@
     const localGroup = el('div');
     const siteGroup = el('div');
     menu.append(localGroup, siteGroup, el('div', 'foot', 'Layó\'s Download Manager'));
-    const info = { src: video.currentSrc || video.src, duration: video.duration, pageUrl: location.href, title };
+    const pageUrl = postUrlFor(video);
+    host.dataset.pageUrl = pageUrl; // which post the menu is for (also read by tests)
+    const info = { src: video.currentSrc || video.src, duration: video.duration, pageUrl, title };
 
     // What the page itself played: instant.
     api.runtime.sendMessage({ type: 'videoChoices', ...info }).then((r) => {

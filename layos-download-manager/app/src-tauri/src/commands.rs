@@ -498,3 +498,9 @@ pub fn window_title(window: tauri::WebviewWindow, title: String) -> R<()> {
 pub fn show_app(app: tauri::AppHandle) {
     crate::state::show_window(&app);
 }
+
+/// The Exit button (and Ctrl+Q): closes the app for real.
+#[tauri::command]
+pub async fn exit_app(app: tauri::AppHandle) {
+    crate::exit(&app).await;
+}

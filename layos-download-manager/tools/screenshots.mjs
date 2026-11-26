@@ -147,6 +147,24 @@ for (const scheme of ['light', 'dark']) {
   await page.locator('#rows tr').nth(150).waitFor({ state: 'attached' });
   await page.waitForTimeout(1200);
   await shot(page, 'app-long-list');
+  await page.hover('#btn-columns');
+  await page.locator('#tooltip:not([hidden])').waitFor();
+  await page.waitForTimeout(250);
+  await shot(page, 'app-tooltip');
+  // Dragging the Size header in front of Name.
+  {
+    const from = await page.locator('th[data-key="size"] .th-button').boundingBox();
+    const to = await page.locator('th[data-key="name"] .th-button').boundingBox();
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(to.x + 30, from.y + 12, { steps: 8 });
+    await page.waitForTimeout(200);
+    await shot(page, 'app-column-move');
+    await page.mouse.up();
+    await page.evaluate(() => localStorage.removeItem('ldm.table.v1'));
+    await page.reload();
+    await page.locator('#rows tr').nth(150).waitFor({ state: 'attached' });
+  }
   await page.click('#btn-columns');
   await page.waitForTimeout(300);
   await shot(page, 'app-columns-menu');

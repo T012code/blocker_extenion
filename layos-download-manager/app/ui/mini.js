@@ -5,6 +5,7 @@
 import { invoke, isMock, listen } from './backend.js';
 import { bytes, eta, percent, speed } from './format.js';
 import { hydrateIcons } from './icons.js';
+import { initTooltips } from './tooltip.js';
 
 const $ = (id) => document.getElementById(id);
 const WIDTH = 320;
@@ -93,6 +94,7 @@ function setExpanded(on) {
 
 async function start() {
   hydrateIcons();
+  initTooltips();
   setExpanded(false);
   for (const d of (await invoke('list').catch(() => [])) ?? []) downloads.set(d.id, d);
   render();

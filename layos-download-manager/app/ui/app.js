@@ -6,6 +6,7 @@ import { action, bytes, eta, percent, speed } from './format.js';
 import { initDialogs, openAdd, openRefresh, openDeleteQueue, openGrab, openQueue, openRemove, openSchedule, openSettings } from './dialogs.js';
 import { hydrateIcons, icon } from './icons.js';
 import { initLayout } from './layout.js';
+import { initTooltips } from './tooltip.js';
 import { renderMap } from './sectionmap.js';
 import { COLUMNS, DownloadTable, statusEl } from './table.js';
 
@@ -246,9 +247,7 @@ function renderDetails() {
   $('d-url').textContent = d.request?.url ?? '';
   $('d-error-wrap').hidden = !d.error || d.status === 'completed';
   $('d-error').textContent = d.error ?? '';
-  $('d-open').disabled = d.status !== 'completed' && d.status !== 'seeding';
   $('d-refresh').hidden = !canRefresh(d);
-  $('d-open').hidden = canRefresh(d);
   if (document.activeElement !== $('d-queue')) {
     $('d-queue').replaceChildren(
       Object.assign(document.createElement('option'), { value: '', textContent: 'No queue' }),
@@ -392,6 +391,15 @@ function openRowMenu(x, y) {
   openMenu($('menu-row'), x, y);
 }
 
+/** Exit for real (closing the window only hides it in the tray). Asks first while
+ *  something is downloading. */
+function askExit() {
+  const running = [...downloads.values()].filter((d) => ['connecting', 'downloading'].includes(d.status)).length;
+  if (!running) return run(invoke('exit_app'), 'Couldn\'t exit');
+  $('exit-text').textContent = `${running === 1 ? 'A download is' : `${running} downloads are`} running. Exiting pauses ${running === 1 ? 'it' : 'them'}, keeping what's downloaded; continue any time after opening the app again.`;
+  $('dlg-exit').showModal();
+}
+
 /** The download's own window (progress, sections, Pause), as in the browser's download bar. */
 function showWindow(d) {
   run(invoke('open_download_window', { id: d.id }), 'Couldn\'t open the window');
@@ -401,7 +409,8 @@ function showWindow(d) {
 function openColumnsMenu(x, y) {
   const visible = table.columns.map((c) => c.key);
   const items = [Object.assign(document.createElement('p'), { className: 'menu-title', textContent: 'Columns' })];
-  for (const c of COLUMNS) {
+  const ordered = table.prefs.order.map((k) => COLUMNS.find((c) => c.key === k)).filter(Boolean);
+  for (const [i, c] of ordered.entries()) {
     const b = document.createElement('button');
     b.setAttribute('role', 'menuitemcheckbox');
     const on = visible.includes(c.key);
@@ -416,7 +425,7 @@ function openColumnsMenu(x, y) {
       render();
       const r = $('menu-columns').getBoundingClientRect();
       openColumnsMenu(r.left, r.top);
-      $('menu-columns').querySelector(`[aria-checked]:nth-of-type(${COLUMNS.indexOf(c) + 1})`)?.focus();
+      $('menu-columns').querySelectorAll('[aria-checked]')[i]?.focus();
     });
     items.push(b);
   }
@@ -497,6 +506,9 @@ function bindExtras() {
     openColumnsMenu(r.right - 220, r.bottom + 4);
   });
   $('table').querySelector('thead').addEventListener('contextmenu', (e) => { e.preventDefault(); openColumnsMenu(e.clientX, e.clientY); });
+  $('dlg-exit').addEventListener('close', () => {
+    if ($('dlg-exit').returnValue === 'exit') run(invoke('exit_app'), 'Couldn\'t exit');
+  });
   $('btn-mini').addEventListener('click', () => run(invoke('show_mini'), 'Couldn\'t open the mini window'));
   $('d-refresh').addEventListener('click', () => { const [d] = selectedDownloads(); if (d) openRefresh(d); });
   listen('refresh-request', (id) => { const d = downloads.get(id); if (d) openRefresh(d); });
@@ -562,7 +574,7 @@ function bind() {
   $('btn-settings').addEventListener('click', () => openSettings());
   $('privacy-banner-btn').addEventListener('click', () => openSettings('privacy'));
   $('credit').addEventListener('click', () => run(invoke('open_portfolio'), 'Couldn\'t open the link'));
-  $('d-open').addEventListener('click', () => { const [d] = selectedDownloads(); if (d) run(invoke('open_download', { id: d.id }), 'Couldn\'t open it'); });
+  $('btn-exit').addEventListener('click', askExit);
   $('d-folder').addEventListener('click', () => { const [d] = selectedDownloads(); if (d) run(invoke('show_in_folder', { id: d.id }), 'Couldn\'t show the folder'); });
   $('d-copy').addEventListener('click', () => { const [d] = selectedDownloads(); if (d) copyAddress(d); });
   $('d-sections').addEventListener('change', async (e) => {
@@ -576,6 +588,7 @@ function bind() {
     const ctrl = e.ctrlKey || e.metaKey;
     if (ctrl && e.key.toLowerCase() === 'n') { e.preventDefault(); openAdd(); }
     else if (ctrl && e.key === ',') { e.preventDefault(); openSettings(); }
+    else if (ctrl && e.key.toLowerCase() === 'q') { e.preventDefault(); askExit(); }
     else if (ctrl && e.key.toLowerCase() === 'a') { e.preventDefault(); for (const r of $('rows').children) selected.add(Number(r.dataset.id)); render(); }
     else if (ctrl && e.key.toLowerCase() === 'p') { e.preventDefault(); pauseSelected(); }
     else if (ctrl && e.key.toLowerCase() === 'r') { e.preventDefault(); resumeSelected(); }
@@ -594,6 +607,7 @@ async function start() {
   hydrateIcons();
   table = new DownloadTable({ table: $('table'), onChange: render });
   initLayout();
+  initTooltips();
   bind();
   info = { ...info, ...(await run(invoke('app_info'), 'Couldn\'t start')) };
   initDialogs();

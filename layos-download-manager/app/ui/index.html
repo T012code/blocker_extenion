@@ -9,9 +9,9 @@
 <body>
   <div class="app" id="app">
     <aside class="sidebar" id="sidebar" aria-label="Library">
-      <div class="brand">
+      <div class="brand" title="Layó's Download Manager">
         <img src="brand/app-icon.png" alt="" width="28" height="28">
-        <span class="label">Layó's Download&nbsp;Manager</span>
+        <span class="label"><span>Layó's</span><span>Download Manager</span></span>
       </div>
       <nav id="nav" aria-label="Downloads">
         <button class="nav-item active" data-filter="all" title="All downloads"><span class="label"><i data-icon="all"></i><span class="text">All downloads</span></span><span class="count" data-count="all"></span></button>
@@ -32,7 +32,11 @@
         <div id="queue-nav"></div>
       </nav>
       <div class="sidebar-foot">
-        <div class="total-speed" title="Total speed"><i data-icon="arrow-down"></i><span class="muted label">Speed</span> <strong id="total-speed">0 B/s</strong></div>
+        <div class="total-speed" title="Total speed of all downloads"><i data-icon="arrow-down"></i><span class="muted label">Speed</span> <strong id="total-speed">0 B/s</strong></div>
+        <div class="foot-actions">
+          <button class="foot-btn" id="btn-sidebar" type="button" aria-controls="sidebar" aria-expanded="true" title="Hide the side bar (Ctrl+B)"><i data-icon="sidebar-close" class="sb-close"></i><i data-icon="sidebar-open" class="sb-open"></i><span class="label">Hide side bar</span></button>
+          <button class="foot-btn" id="btn-exit" type="button" title="Exit Layó's Download Manager (Ctrl+Q). Closing the window only hides it in the tray."><i data-icon="power"></i><span class="label">Exit</span></button>
+        </div>
         <button class="credit" id="credit" type="button" title="Developed by Layó · opens layothedeveloper.com">
           <img class="mark-light" src="brand/layo-mark-light.svg" alt="">
           <img class="mark-dark" src="brand/layo-mark-dark.svg" alt="">
@@ -44,7 +48,6 @@
 
     <main class="main" id="main">
       <header class="toolbar" aria-label="Actions">
-        <button class="btn icon subtle" id="btn-sidebar" title="Hide the side bar (Ctrl+B)" aria-label="Side bar" aria-controls="sidebar" aria-expanded="true"><i data-icon="sidebar"></i></button>
         <button class="btn primary" id="btn-add" title="Add a download (Ctrl+N)"><i data-icon="plus"></i>Add</button>
         <div class="group" role="group" aria-label="Selected downloads">
           <button class="btn" id="btn-resume" disabled title="Continue (Ctrl+R)"><i data-icon="play"></i><span class="label">Continue</span></button>
@@ -59,8 +62,8 @@
           <i data-icon="search"></i>
           <input id="search" type="search" placeholder="Search" aria-label="Search downloads">
         </label>
-        <button class="btn icon subtle" id="btn-columns" title="Columns" aria-label="Columns" aria-haspopup="menu" aria-expanded="false"><i data-icon="columns"></i></button>
-        <button class="btn icon subtle" id="btn-details" title="Hide details (Ctrl+J)" aria-label="Details" aria-controls="details" aria-expanded="true"><i data-icon="details"></i></button>
+        <button class="btn icon subtle" id="btn-columns" title="Choose columns" aria-label="Choose columns" aria-haspopup="menu" aria-expanded="false"><i data-icon="columns"></i></button>
+        <button class="btn icon subtle" id="btn-details" title="Hide the details panel (Ctrl+J)" aria-label="Details panel" aria-controls="details" aria-expanded="true"><i data-icon="details"></i></button>
         <button class="btn icon subtle" id="btn-settings" title="Settings (Ctrl+,)" aria-label="Settings"><i data-icon="settings"></i></button>
       </header>
 
@@ -118,10 +121,9 @@
           </div>
           <div class="details-actions">
             <button class="btn small primary" id="d-refresh" hidden><i data-icon="refresh"></i>Refresh link</button>
-            <button class="btn small" id="d-open"><i data-icon="external"></i>Open</button>
             <button class="btn small" id="d-folder"><i data-icon="folder"></i>Show in folder</button>
-            <button class="btn small icon" id="d-window" title="Show download window" aria-label="Show download window"><i data-icon="maximize"></i></button>
-            <button class="btn small icon" id="d-copy" title="Copy address" aria-label="Copy address"><i data-icon="copy"></i></button>
+            <button class="btn small icon" id="d-window" title="Show this download's window" aria-label="Show this download's window"><i data-icon="maximize"></i></button>
+            <button class="btn small icon" id="d-copy" title="Copy the download address" aria-label="Copy the download address"><i data-icon="copy"></i></button>
           </div>
         </div>
         <div class="details-body" id="details-body">
@@ -288,6 +290,19 @@
     </form>
   </dialog>
 
+  <!-- Exit while downloading -->
+  <dialog id="dlg-exit" aria-labelledby="exit-title">
+    <form method="dialog" class="dialog narrow">
+      <h2 id="exit-title">Exit Layó's Download Manager?</h2>
+      <p id="exit-text"></p>
+      <div class="actions">
+        <span class="spacer"></span>
+        <button class="btn" value="cancel">Keep running</button>
+        <button class="btn primary" value="exit" id="exit-ok"><i data-icon="power"></i>Exit</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="dlg-remove" aria-labelledby="remove-title">
     <form method="dialog" class="dialog narrow">
       <h2 id="remove-title">Remove from list</h2>
@@ -392,7 +407,7 @@
           <label class="check"><input type="checkbox" name="showCompleteWindow"><span>Show a window when a download finishes<small>With Open and Show in folder.</small></span></label>
           <label class="check"><input type="checkbox" name="showMiniWindow"><span>Show the mini window while downloading<small>A small summary of everything downloading, above other windows.</small></span></label>
           <p class="group-title">Browser</p>
-          <label class="check"><input type="checkbox" name="askForBrowserDownloads"><span>Ask before downloading what the browser sends</span></label>
+          <label class="check"><input type="checkbox" name="askForBrowserDownloads"><span>Ask before downloading what the browser sends<small>Off: downloads start at once, each in its own small window, while this window stays in the tray.</small></span></label>
           <label class="check"><input type="checkbox" name="handleTorrentLinks"><span>Open magnet links and .torrent files here</span></label>
           <label class="check"><input type="checkbox" name="openTorrentFiles"><span>Start downloaded .torrent files automatically</span></label>
         </section>

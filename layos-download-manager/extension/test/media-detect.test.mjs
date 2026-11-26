@@ -15,6 +15,9 @@ test('ignores pieces of streams, previews and non-media', () => {
   assert.equal(classify({ url: 'https://cdn.x/seg_001.ts', mime: 'video/mp2t' }), null);
   assert.equal(classify({ url: 'https://cdn.x/chunk.m4s' }), null);
   assert.equal(classify({ url: 'https://rr1.googlevideo.com/videoplayback?itag=22&range=0-9999', mime: 'video/mp4' }), null);
+  // Facebook and Instagram stream pieces.
+  assert.equal(classify({ url: 'https://video.fxyz1-1.fna.fbcdn.net/o1/v/t2/f2/m69/abc.mp4?efg=x&bytestart=0&byteend=8191', mime: 'video/mp4' }), null);
+  assert.equal(classify({ url: 'https://scontent.cdninstagram.com/v/t50/abc.mp4?_nc_ht=x&bytestart=966&byteend=200000', mime: 'video/mp4' }), null);
   assert.equal(classify({ url: 'https://cdn.x/preview.mp4', size: 50_000 }), null);
   assert.equal(classify({ url: 'https://cdn.x/page.html', mime: 'text/html' }), null);
   assert.equal(classify({ url: 'blob:https://x/123', mime: 'video/mp4' }), null);

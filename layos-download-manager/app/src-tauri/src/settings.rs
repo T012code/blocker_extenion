@@ -10,6 +10,9 @@ const KEY: &str = "app_settings";
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AppSettings {
+    /// Which version of these settings was saved (for one-time changes of defaults).
+    #[serde(default)]
+    pub version: u32,
     /// Main download folder.
     pub download_dir: PathBuf,
     /// Save into Video, Music, Documents… sub-folders.
@@ -44,14 +47,19 @@ pub struct AppSettings {
     pub privacy: Privacy,
 }
 
+/// Version 2: browser downloads no longer ask first; they start with their own window.
+const VERSION: u32 = 2;
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
+            version: VERSION,
             download_dir: PathBuf::new(),
             category_folders: true,
             default_connections: 8,
             global_speed_limit: 0,
-            ask_for_browser_downloads: true,
+            // Browser downloads start at once, each in its own small window.
+            ask_for_browser_downloads: false,
             close_to_tray: true,
             minimize_to_tray: false,
             launch_on_startup: true,
@@ -69,6 +77,14 @@ impl Default for AppSettings {
 }
 
 impl AppSettings {
+    /// One-time changes for settings saved by an older version.
+    fn migrate(&mut self) {
+        if self.version < 2 {
+            self.ask_for_browser_downloads = false;
+        }
+        self.version = VERSION;
+    }
+
     pub fn load(engine: &ldm_engine::Engine, default_dir: PathBuf) -> Self {
         let mut s: Self = engine
             .load_setting(KEY)
@@ -76,6 +92,7 @@ impl AppSettings {
             .flatten()
             .and_then(|j| serde_json::from_str(&j).ok())
             .unwrap_or_default();
+        s.migrate();
         if s.download_dir.as_os_str().is_empty() {
             s.download_dir = default_dir;
         }
@@ -110,5 +127,26 @@ impl AppSettings {
             c.global_speed_limit = limit;
             c.default_connections = sections;
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn older_settings_stop_asking_for_browser_downloads_once() {
+        let mut old: AppSettings =
+            serde_json::from_str(r#"{"askForBrowserDownloads":true,"closeToTray":true}"#).unwrap();
+        assert_eq!(old.version, 0);
+        old.migrate();
+        assert!(!old.ask_for_browser_downloads);
+        assert_eq!(old.version, VERSION);
+        // Turned back on after that, it stays on.
+        old.ask_for_browser_downloads = true;
+        let mut again: AppSettings =
+            serde_json::from_str(&serde_json::to_string(&old).unwrap()).unwrap();
+        again.migrate();
+        assert!(again.ask_for_browser_downloads);
     }
 }

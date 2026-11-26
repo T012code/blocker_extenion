@@ -160,3 +160,26 @@ The folder field is one control (folder, path, ×, Choose…) on its own row; ex
 | --- | --- |
 | A folder chosen (× goes back to automatic) | ![](refresh-and-folders/after/app-add-folder-chosen.png) |
 | Refresh the link of an expired download | ![](refresh-and-folders/after/app-refresh-link.png) |
+
+## Side bar, tooltips, columns and Exit
+
+The full name in the side bar on two lines; "Hide side bar" and "Exit" as labelled buttons at its foot; tooltips naming every icon button (with its shortcut); no Open button in the details; columns that narrow to any width (Name too) and move by dragging their header. Screens in [sidebar-columns-exit/after](sidebar-columns-exit/after).
+
+![Main window (light): before and after](sidebar-columns-exit/compare/app-main-light.png)
+
+![Main window (dark): before and after](sidebar-columns-exit/compare/app-main-dark.png)
+
+![Side bar folded: before and after](sidebar-columns-exit/compare/app-folded.png)
+
+![More columns, sorted: before and after](sidebar-columns-exit/compare/app-columns-sorted.png)
+
+![Columns menu: before and after](sidebar-columns-exit/compare/app-columns-menu.png)
+
+![Settings, General: before and after](sidebar-columns-exit/compare/app-settings-general.png)
+
+### New
+
+| | |
+| --- | --- |
+| Tooltip on an icon button | ![](sidebar-columns-exit/after/app-tooltip.png) |
+| Moving a column by dragging its header | ![](sidebar-columns-exit/after/app-column-move.png) |

@@ -15,6 +15,16 @@ use std::time::Duration;
 use tauri::{AppHandle, Manager, WindowEvent};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 
+/// Exit (the only way to close the app; closing the window keeps it in the tray):
+/// running downloads are paused first, so what they've fetched is saved exactly. They
+/// stay paused, ready to continue, when the app opens again.
+pub async fn exit(app: &AppHandle) {
+    if let Some(state) = app.try_state::<Arc<state::AppState>>() {
+        state.engine.pause_all().await;
+    }
+    app.exit(0);
+}
+
 /// Adds or removes the "start with Windows" entry.
 pub fn apply_autostart(app: &AppHandle, on: bool) {
     let a = app.autolaunch();
@@ -196,6 +206,7 @@ fn main() {
             commands::window_size,
             commands::window_title,
             commands::show_app,
+            commands::exit_app,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Layó's Download Manager");

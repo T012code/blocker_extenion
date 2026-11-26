@@ -18,7 +18,7 @@ pub fn create(app: &App) -> tauri::Result<()> {
     )?;
     let pause = MenuItem::with_id(app, "pause_all", "Pause all", true, None::<&str>)?;
     let resume = MenuItem::with_id(app, "resume_all", "Continue all", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Exit", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
     let menu = Menu::with_items(
         app,
@@ -49,7 +49,10 @@ pub fn create(app: &App) -> tauri::Result<()> {
                         }
                     }
                 }
-                "quit" => app.exit(0),
+                "quit" => {
+                    let app = app.clone();
+                    tauri::async_runtime::spawn(async move { crate::exit(&app).await });
+                }
                 _ => {}
             }
         })

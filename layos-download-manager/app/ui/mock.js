@@ -21,7 +21,7 @@ let settings = {
   categoryFolders: true,
   defaultConnections: 8,
   globalSpeedLimit: 0,
-  askForBrowserDownloads: true,
+  askForBrowserDownloads: false,
   closeToTray: true,
   minimizeToTray: false,
   launchOnStartup: true,
@@ -264,7 +264,7 @@ export async function invoke(cmd, args) {
       return null;
     case 'get': { const d = downloads.get(args.id); if (!d) throw new Error('no such download'); return { ...d, live: undefined }; }
     case 'open_download_window': case 'show_mini': case 'mini_dismiss': case 'window_hide': case 'window_close':
-    case 'window_size': case 'window_title': case 'show_app':
+    case 'window_size': case 'window_title': case 'show_app': case 'exit_app':
       window.__ldmCalls.push({ cmd, args: structuredClone(args) });
       return null;
     default: throw new Error(`mock: ${cmd} isn't simulated`);
