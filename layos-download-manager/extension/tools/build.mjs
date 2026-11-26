@@ -4,7 +4,7 @@
 // With --zip, also writes store-ready zips next to them.
 // With --store, leaves out the development "key" (the stores give their own id).
 
-import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -48,7 +48,14 @@ for (const [name, manifest] of [['chromium', chromium()], ['firefox', firefox()]
   writeFileSync(join(out, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
   if (zip) {
     const file = join(dist, `layos-download-manager-${name}-${base.version}.zip`);
-    execFileSync('zip', ['-qr', '-X', file, '.'], { cwd: out });
+    if (process.platform === 'win32') {
+      // Windows has no zip command; its own tar (bsdtar) writes zips with -a. List the
+      // top-level entries so paths inside the zip don't start with "./".
+      const tar = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe');
+      execFileSync(tar, ['-a', '-c', '-f', file, ...readdirSync(out)], { cwd: out });
+    } else {
+      execFileSync('zip', ['-qr', '-X', file, '.'], { cwd: out });
+    }
     console.log(`wrote ${file}`);
   } else {
     console.log(`built ${out}`);
