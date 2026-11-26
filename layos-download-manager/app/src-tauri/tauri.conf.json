@@ -1,0 +1,37 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Layó's Download Manager",
+  "mainBinaryName": "LayosDownloadManager",
+  "version": "0.1.0",
+  "identifier": "dev.layo.downloadmanager",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Layó's Download Manager",
+        "width": 1180,
+        "height": 740,
+        "minWidth": 880,
+        "minHeight": 540,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self'; font-src 'self'; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "publisher": "Layó",
+    "homepage": "https://layothedeveloper.com",
+    "copyright": "Developed by Layó",
+    "category": "Utility",
+    "shortDescription": "Fast downloads, videos and private torrents",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico", "icons/icon.png"]
+  }
+}

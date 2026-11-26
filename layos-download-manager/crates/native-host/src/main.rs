@@ -147,7 +147,7 @@ fn app_path() -> std::io::Result<PathBuf> {
     let name = if cfg!(windows) {
         "LayosDownloadManager.exe"
     } else {
-        "layos-download-manager"
+        "LayosDownloadManager"
     };
     Ok(dir.join(name))
 }

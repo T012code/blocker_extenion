@@ -4,7 +4,7 @@
 
 A free download manager for Windows. It speeds up downloads by fetching each file in many sections at once, resumes broken downloads, catches downloads from your browser, and grabs videos from web pages.
 
-> **Status:** in development. Done and tested: the download engine, the browser extension, the browser bridge, the video download button and torrents. Next: the desktop app, queues and scheduler, and the installer.
+> **Status:** in development. Done and tested: the download engine, the browser extension and bridge, the video download button, torrents with privacy protection, and the desktop app. Next: the installer (bundling yt-dlp and ffmpeg, registering the browser bridge), then queues and the scheduler.
 
 ## How the multi-section download works
 
@@ -57,6 +57,17 @@ More sections help most on fast connections and servers that limit speed per con
 Any download can be paused and continued. Most servers allow fetching part of a file (byte ranges), so a paused download continues exactly where it stopped, even after closing the app or restarting the computer: the parts already on disk are kept in `name.ext.ldmpart` and their positions in the download database. Before downloading, the app asks the server whether it supports this. If it doesn't, the download is marked **Can't resume**, and continuing it starts the file again from the beginning.
 
 Until the desktop app is ready, the browser extension's toolbar pop-up lists your downloads with live progress, speed and time left, and has **Pause** and **Continue** buttons.
+
+## The app
+
+The main window lists your downloads with their progress, speed and time left. Categories on the left (Video, Music, Documents, Compressed, Programs, Torrents) and a search box narrow the list. Select a download to see its **live section map**: one strip per section, filled as it downloads, with a lime marker where each connection is working. You can change its **number of sections while it runs**.
+
+- **Add** (or Ctrl+N, or paste a link anywhere): checks the address first, showing name, size and whether it can be paused and continued. A video page lists its formats; magnet links and `.torrent` files become torrents. You choose the name, folder and sections.
+- **Continue, Pause, Remove** (Ctrl+R, Ctrl+P, Delete) work on one or many selected downloads; double-click opens a finished file.
+- **From the browser:** downloads the extension sends can be confirmed first, and "Download all links" lets you tick which files to get.
+- **Settings:** download folder and category folders, default sections, overall speed limit, browser behaviour, the tray, notifications, and **Torrents & privacy** (mode, proxy with a Test button, VPN adapter, sharing ratio, blocklist).
+- Closing the window keeps it running in the tray, where you can pause or continue everything.
+- Light and dark follow Windows. *Developed by Layó* in the corner links to [layothedeveloper.com](https://layothedeveloper.com).
 
 ## Download button on videos
 
@@ -118,6 +129,9 @@ layos-download-manager/
   crates/media/          Video downloads (yt-dlp + ffmpeg): format menus and a runner
   crates/testkit/        Test web servers used by the Rust tests
   vendor/                A patched librqbit part (IPv4 fallback); see its NOTICE.md
+  app/src-tauri/         The Windows app (Tauri 2): window, tray, settings, commands
+  app/ui/                Its interface (HTML, CSS, JavaScript; mock.js simulates the backend for tests)
+  app/test/              Interface tests in Chromium
   extension/             Browser extension (Chrome-family and Firefox builds)
   brand/                 Colours, fonts and Layó's logo from layothedeveloper.com
   app-icon.png           App icon (drawn by extension/tools/make-icons.py)
@@ -140,6 +154,18 @@ cd extension && npm test && npm run test:e2e
 ```
 
 Unit tests for the capture rules, then an end-to-end test in a real Chromium with the extension, the bridge and the download manager.
+
+```bash
+cd app && node test/ui.e2e.mjs
+```
+
+Tries the app window in Chromium against a simulated backend: section map, changing sections, pause and continue, adding downloads and videos, privacy settings, browser downloads, removing, categories, light and dark.
+
+On Windows, `.github/workflows/download-manager-windows.yml` builds and tests everything and produces the installer. To build it yourself (in `app/src-tauri`):
+
+```bash
+npx @tauri-apps/cli@2 build
+```
 
 To try the extension against a running download manager without the desktop app:
 

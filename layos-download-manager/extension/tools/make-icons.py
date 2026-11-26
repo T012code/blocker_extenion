@@ -1,7 +1,7 @@
 """Draws the Layó's Download Manager icon: a down arrow over a bar cut into sections.
 
-Run: python3 tools/make-icons.py  (needs Pillow). Writes src/icons/icon-{16,32,48,128}.png
-and ../app-icon.png (1024 px) for the desktop app.
+Run: python3 tools/make-icons.py  (needs Pillow). Writes src/icons/icon-{16,32,48,128}.png,
+../app-icon.png (1024 px), and the desktop app's icons in ../app/src-tauri/icons/.
 """
 from pathlib import Path
 
@@ -51,4 +51,10 @@ if __name__ == "__main__":
     for n in (16, 32, 48, 128):
         draw(n).save(out / f"icon-{n}.png")
     draw(1024).save(ROOT.parent / "app-icon.png")
+    # Desktop app icons (Tauri): PNGs and a multi-size Windows .ico.
+    app = ROOT.parent / "app" / "src-tauri" / "icons"
+    app.mkdir(parents=True, exist_ok=True)
+    for name, n in (("32x32.png", 32), ("128x128.png", 128), ("128x128@2x.png", 256), ("icon.png", 512)):
+        draw(n).save(app / name)
+    draw(256).save(app / "icon.ico", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
     print("icons written")

@@ -155,6 +155,21 @@ impl TorrentRunner {
         }))
     }
 
+    /// Pauses every torrent and closes the session (before replacing it with new settings).
+    pub async fn shutdown(&self) {
+        let handles: Vec<_> = self
+            .handles
+            .lock()
+            .unwrap()
+            .drain()
+            .map(|(_, h)| h)
+            .collect();
+        for h in handles {
+            self.pause(&h).await;
+        }
+        self.session.stop().await;
+    }
+
     /// The address other peers can reach this session on.
     pub fn listen_addr(&self) -> Option<SocketAddr> {
         self.session.listen_addr()
