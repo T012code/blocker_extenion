@@ -11,9 +11,17 @@ fn notify(app: &AppHandle, title: &str, body: &str) {
 pub fn queue_finished(app: &AppHandle, queue: &Queue, action: WhenDone) {
     let name = &queue.name;
     match action {
-        WhenDone::Nothing => notify(app, "Queue finished", &format!("\"{name}\" has downloaded everything.")),
+        WhenDone::Nothing => notify(
+            app,
+            "Queue finished",
+            &format!("\"{name}\" has downloaded everything."),
+        ),
         WhenDone::Quit => {
-            notify(app, "Queue finished", &format!("\"{name}\" is done. Closing Layó's Download Manager."));
+            notify(
+                app,
+                "Queue finished",
+                &format!("\"{name}\" is done. Closing Layó's Download Manager."),
+            );
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_secs(3)).await;
@@ -21,11 +29,19 @@ pub fn queue_finished(app: &AppHandle, queue: &Queue, action: WhenDone) {
             });
         }
         WhenDone::Sleep => {
-            notify(app, "Queue finished", &format!("\"{name}\" is done. Putting the computer to sleep."));
+            notify(
+                app,
+                "Queue finished",
+                &format!("\"{name}\" is done. Putting the computer to sleep."),
+            );
             sleep_now();
         }
         WhenDone::ShutDown => {
-            notify(app, "Shutting down in 60 seconds", &format!("\"{name}\" is done. Open Layó's Download Manager to cancel."));
+            notify(
+                app,
+                "Shutting down in 60 seconds",
+                &format!("\"{name}\" is done. Open Layó's Download Manager to cancel."),
+            );
             if shut_down_soon(name).is_ok() {
                 let _ = app.emit("shutdown-pending", name);
                 crate::state::show_window(app);
@@ -38,7 +54,10 @@ pub fn queue_finished(app: &AppHandle, queue: &Queue, action: WhenDone) {
 fn run(program: &str, args: &[&str]) -> std::io::Result<std::process::ExitStatus> {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    std::process::Command::new(program).args(args).creation_flags(CREATE_NO_WINDOW).status()
+    std::process::Command::new(program)
+        .args(args)
+        .creation_flags(CREATE_NO_WINDOW)
+        .status()
 }
 
 #[cfg(windows)]

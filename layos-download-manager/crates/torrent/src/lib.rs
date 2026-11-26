@@ -306,40 +306,43 @@ impl TorrentRunner {
         });
 
         // 2. Add it for real (or wake it up if it's already in the session).
-        let existing = self.handles.lock().unwrap().get(&id).cloned();
-        let handle = match existing {
-            Some(h) => h,
-            None => {
-                std::fs::create_dir_all(&output)?;
-                let mut peers = meta.seen_peers.clone();
-                peers.extend(self.options.extra_peers.iter().copied());
-                let opts = AddTorrentOptions {
-                    output_folder: Some(output.to_string_lossy().into_owned()),
-                    only_files: spec.only_files.clone(),
-                    // Files already on disk are checked and kept, which is how continuing works.
-                    overwrite: true,
-                    initial_peers: (!peers.is_empty()).then_some(peers),
-                    ratelimits: limits(
-                        (d.speed_limit > 0).then(|| d.speed_limit.min(u32::MAX as u64) as u32),
-                        None,
-                    ),
-                    ..Default::default()
-                };
-                let resp = self
-                    .session
-                    .add_torrent(
-                        AddTorrent::TorrentFileBytes(self.clean(meta.torrent_bytes.clone())),
-                        Some(opts),
-                    )
-                    .await
-                    .map_err(other)?;
-                let h = resp
-                    .into_handle()
-                    .ok_or_else(|| other("the torrent could not be added"))?;
-                self.handles.lock().unwrap().insert(id, h.clone());
-                h
-            }
+        // Continuing after a pause: take the old torrent out of the session (keeping its
+        // files) and add it again. Pieces that were mid-transfer at the pause otherwise
+        // stay marked as "being fetched" and the download can stall one piece short.
+        let stale = self.handles.lock().unwrap().remove(&id);
+        if let Some(old) = stale {
+            let _ = self
+                .session
+                .delete(TorrentIdOrHash::Id(old.id()), false)
+                .await;
+        }
+        std::fs::create_dir_all(&output)?;
+        let mut peers = meta.seen_peers.clone();
+        peers.extend(self.options.extra_peers.iter().copied());
+        let opts = AddTorrentOptions {
+            output_folder: Some(output.to_string_lossy().into_owned()),
+            only_files: spec.only_files.clone(),
+            // Files already on disk are checked and kept, which is how continuing works.
+            overwrite: true,
+            initial_peers: (!peers.is_empty()).then_some(peers),
+            ratelimits: limits(
+                (d.speed_limit > 0).then(|| d.speed_limit.min(u32::MAX as u64) as u32),
+                None,
+            ),
+            ..Default::default()
         };
+        let resp = self
+            .session
+            .add_torrent(
+                AddTorrent::TorrentFileBytes(self.clean(meta.torrent_bytes.clone())),
+                Some(opts),
+            )
+            .await
+            .map_err(other)?;
+        let handle = resp
+            .into_handle()
+            .ok_or_else(|| other("the torrent could not be added"))?;
+        self.handles.lock().unwrap().insert(id, handle.clone());
         if handle.is_paused() {
             self.session.unpause(&handle).await.map_err(other)?;
         }
