@@ -1,0 +1,28 @@
+[workspace]
+resolver = "3"
+members = ["crates/engine"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+authors = ["Layo"]
+repository = "https://github.com/t012code/blocker_extenion"
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "io-util", "net"] }
+tokio-util = "0.7"
+reqwest = { version = "0.13", default-features = false, features = ["native-tls", "http2", "charset", "system-proxy", "stream", "socks"] }
+futures-util = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+rusqlite = { version = "0.43", features = ["bundled"] }
+percent-encoding = "2"
+mime_guess = "2"
+tracing = "0.1"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

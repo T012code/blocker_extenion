@@ -1,0 +1,22 @@
+[package]
+name = "ldm-engine"
+description = "Download engine for Layó's Download Manager"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tokio.workspace = true
+tokio-util.workspace = true
+reqwest.workspace = true
+futures-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+rusqlite.workspace = true
+percent-encoding.workspace = true
+mime_guess.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
