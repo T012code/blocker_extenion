@@ -49,9 +49,18 @@ async fn main() {
         "media",
         ldm_media::MediaRunner::new(tools.clone(), dir.join("media-work")),
     );
-    match ldm_torrent::TorrentRunner::start(ldm_torrent::TorrentOptions::new(dir.join("torrents")))
-        .await
-    {
+    // Torrent privacy (VPN / proxy, kill switch). Stored as JSON under "torrent_privacy";
+    // without one, torrents wait for a VPN or proxy rather than expose your IP.
+    let privacy: ldm_torrent::privacy::Privacy = engine
+        .load_setting("torrent_privacy")
+        .ok()
+        .flatten()
+        .and_then(|j| serde_json::from_str(&j).ok())
+        .unwrap_or_default();
+    eprintln!("torrent privacy: {:?}", privacy.mode);
+    let mut torrent_opts = ldm_torrent::TorrentOptions::new(dir.join("torrents"));
+    torrent_opts.privacy = privacy;
+    match ldm_torrent::TorrentRunner::start(torrent_opts).await {
         Ok(t) => engine.set_runner("torrent", t),
         Err(e) => eprintln!("torrents are unavailable: {e:#}"),
     }

@@ -293,6 +293,7 @@ fn status_name(s: DownloadStatus) -> &'static str {
         DownloadStatus::Completed => "completed",
         DownloadStatus::Failed => "failed",
         DownloadStatus::NeedsRefresh => "needsRefresh",
+        DownloadStatus::Blocked => "blocked",
         DownloadStatus::Seeding => "seeding",
     }
 }

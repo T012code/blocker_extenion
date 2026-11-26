@@ -21,11 +21,15 @@ use ldm_engine::{
 use librqbit::api::TorrentIdOrHash;
 use librqbit::limits::LimitsConfig;
 use librqbit::{
-    AddTorrent, AddTorrentOptions, AddTorrentResponse, ListOnlyResponse, ListenerOptions,
-    ManagedTorrent, Session, SessionOptions,
+    AddTorrent, AddTorrentOptions, AddTorrentResponse, ConnectionOptions, ListOnlyResponse,
+    ListenerOptions, ManagedTorrent, Session, SessionOptions,
 };
+use tokio::sync::watch;
 
 pub use librqbit::{CreateTorrentOptions, create_torrent};
+
+pub mod privacy;
+use privacy::{Plan, Privacy, Protection};
 
 #[derive(Debug, Clone)]
 pub struct TorrentOptions {
@@ -44,6 +48,10 @@ pub struct TorrentOptions {
     pub upload_limit: Option<u32>,
     /// Peers to try straight away, besides trackers and the DHT (tests).
     pub extra_peers: Vec<SocketAddr>,
+    /// VPN / proxy protection and what's shared. See [`privacy`].
+    pub privacy: Privacy,
+    /// How often the kill switch checks the VPN or proxy.
+    pub check_every: Duration,
 }
 
 impl TorrentOptions {
@@ -57,6 +65,8 @@ impl TorrentOptions {
             download_limit: None,
             upload_limit: None,
             extra_peers: Vec::new(),
+            privacy: Privacy::default(),
+            check_every: Duration::from_secs(1),
         }
     }
 }
@@ -68,6 +78,9 @@ pub struct TorrentRunner {
     handles: Mutex<HashMap<DownloadId, Arc<ManagedTorrent>>>,
     /// Lets `run` (which only gets `&self`) hand an owned runner to the download task.
     me: Weak<Self>,
+    plan: Plan,
+    /// The kill switch: whether torrents may run right now.
+    guard: watch::Receiver<Protection>,
 }
 
 fn other(e: impl std::fmt::Display) -> Error {
@@ -86,33 +99,59 @@ impl TorrentRunner {
         std::fs::create_dir_all(options.data_dir.join("torrents"))?;
         // Some computers have IPv6 turned off; then everything must use IPv4.
         let ipv4_only = std::net::UdpSocket::bind("[::]:0").is_err();
+        let plan = privacy::plan(&options.privacy, cfg!(windows)).map_err(anyhow::Error::msg)?;
+        // In VPN mode, only accept incoming connections on the VPN's own address.
+        let listen_ip = match &options.privacy.mode {
+            privacy::PrivacyMode::Vpn { interface } => privacy::interface_ip(interface),
+            _ => None,
+        }
+        .unwrap_or(Ipv4Addr::UNSPECIFIED.into());
+        let blocklist_url = options
+            .privacy
+            .blocklist
+            .as_deref()
+            .map(str::trim)
+            .filter(|b| !b.is_empty())
+            .map(|b| {
+                if b.contains("://") {
+                    b.to_string()
+                } else {
+                    format!("file://{}", Path::new(b).display())
+                }
+            });
         let session = Session::new_with_opts(
             options.data_dir.join("incoming"),
             SessionOptions {
-                dht: options.dht.then(Default::default),
-                disable_local_service_discovery: !options.dht,
+                dht: (plan.dht && options.dht).then(Default::default),
+                disable_local_service_discovery: !(plan.local_discovery && options.dht),
                 persistence: None,
                 fastresume: false,
-                listen: Some(ListenerOptions {
-                    listen_addr: SocketAddr::from((
-                        Ipv4Addr::UNSPECIFIED,
-                        options.listen_port.unwrap_or(0),
-                    )),
-                    enable_upnp_port_forwarding: options.upnp,
+                listen: plan.listen.then(|| ListenerOptions {
+                    listen_addr: SocketAddr::new(listen_ip, options.listen_port.unwrap_or(0)),
+                    enable_upnp_port_forwarding: plan.upnp && options.upnp,
                     ipv4_only,
                     ..Default::default()
                 }),
+                connect: Some(ConnectionOptions {
+                    proxy_url: plan.proxy.clone(),
+                    ..Default::default()
+                }),
+                bind_device_name: plan.bind_device.clone(),
+                blocklist_url,
                 ipv4_only,
                 ratelimits: limits(options.download_limit, options.upload_limit),
                 ..Default::default()
             },
         )
         .await?;
+        let guard = privacy::watch(options.privacy.clone(), options.check_every);
         Ok(Arc::new_cyclic(|me| Self {
             session,
             options,
             handles: Mutex::new(HashMap::new()),
             me: me.clone(),
+            plan,
+            guard,
         }))
     }
 
@@ -121,18 +160,54 @@ impl TorrentRunner {
         self.session.listen_addr()
     }
 
-    fn source<'a>(spec: &TorrentSpec, url: &'a str) -> Result<AddTorrent<'a>> {
+    fn source<'a>(&self, spec: &TorrentSpec, url: &'a str) -> Result<AddTorrent<'a>> {
         if let Some(path) = spec.torrent_file.as_ref().filter(|p| p.exists()) {
-            return Ok(AddTorrent::TorrentFileBytes(Bytes::from(std::fs::read(
-                path,
-            )?)));
+            return Ok(AddTorrent::TorrentFileBytes(
+                self.clean(Bytes::from(std::fs::read(path)?)),
+            ));
         }
         if let Some(path) = url.strip_prefix("file://") {
-            return Ok(AddTorrent::TorrentFileBytes(Bytes::from(std::fs::read(
-                path,
-            )?)));
+            return Ok(AddTorrent::TorrentFileBytes(
+                self.clean(Bytes::from(std::fs::read(path)?)),
+            ));
+        }
+        if self.plan.strip_udp_trackers && url.starts_with("magnet:") {
+            return Ok(AddTorrent::Url(
+                privacy::strip_udp_trackers_magnet(url).into(),
+            ));
         }
         Ok(AddTorrent::Url(url.into()))
+    }
+
+    /// Removes trackers that would bypass the proxy.
+    fn clean(&self, torrent: Bytes) -> Bytes {
+        if !self.plan.strip_udp_trackers {
+            return torrent;
+        }
+        privacy::strip_udp_trackers_torrent(&torrent)
+            .map(Bytes::from)
+            .unwrap_or(torrent)
+    }
+
+    /// Waits until the kill switch allows torrents, showing why while it waits.
+    /// Returns false if the download was paused meanwhile.
+    async fn wait_protected(&self, job: &Job, guard: &mut watch::Receiver<Protection>) -> bool {
+        loop {
+            let state = guard.borrow_and_update().clone();
+            match state {
+                Protection::Ok => return true,
+                Protection::Blocked(reason) => {
+                    job.report.update(|d| {
+                        d.status = DownloadStatus::Blocked;
+                        d.error = Some(reason.clone());
+                    });
+                }
+            }
+            tokio::select! {
+                _ = job.cancel.cancelled() => return false,
+                r = guard.changed() => if r.is_err() { return false },
+            }
+        }
     }
 
     /// Reads the torrent's details (fetching them from peers for a magnet link).
@@ -145,7 +220,7 @@ impl TorrentRunner {
         };
         match self
             .session
-            .add_torrent(Self::source(spec, url)?, Some(opts))
+            .add_torrent(self.source(spec, url)?, Some(opts))
             .await
             .map_err(other)?
         {
@@ -161,6 +236,13 @@ impl TorrentRunner {
             return Err(other("not a torrent"));
         };
         let cancel = job.cancel.clone();
+
+        // 0. Kill switch: nothing touches the network until the VPN or proxy is in place.
+        let mut guard = self.guard.clone();
+        if !self.wait_protected(&job, &mut guard).await {
+            return Err(Error::Cancelled);
+        }
+        job.report.update(|d| d.error = None);
 
         // 1. What's in the torrent? For a magnet this asks peers, which can take a while.
         let meta = tokio::select! {
@@ -231,7 +313,7 @@ impl TorrentRunner {
                 let resp = self
                     .session
                     .add_torrent(
-                        AddTorrent::TorrentFileBytes(meta.torrent_bytes.clone()),
+                        AddTorrent::TorrentFileBytes(self.clean(meta.torrent_bytes.clone())),
                         Some(opts),
                     )
                     .await
@@ -292,6 +374,20 @@ impl TorrentRunner {
                     self.pause(&handle).await;
                     // Stopping a torrent that's only sharing leaves it complete.
                     return if stats.finished { Ok(()) } else { Err(Error::Cancelled) };
+                }
+                // Kill switch: the VPN or proxy dropped. Stop at once, wait, then carry on.
+                _ = guard.changed() => {
+                    if *guard.borrow() != Protection::Ok {
+                        self.pause(&handle).await;
+                        if !self.wait_protected(&job, &mut guard).await {
+                            return if stats.finished { Ok(()) } else { Err(Error::Cancelled) };
+                        }
+                        self.session.unpause(&handle).await.map_err(other)?;
+                        job.report.update(|d| {
+                            d.error = None;
+                            d.status = if seeding { DownloadStatus::Seeding } else { DownloadStatus::Downloading };
+                        });
+                    }
                 }
                 _ = tokio::time::sleep(Duration::from_millis(500)) => {}
             }

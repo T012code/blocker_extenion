@@ -369,3 +369,138 @@ async fn serve_file(mut sock: TcpStream, dir: &std::path::Path) -> std::io::Resu
     sock.write_all(&body[from..to]).await?;
     sock.flush().await
 }
+
+/// A SOCKS5 proxy for privacy tests. It records where every connection went, and can be
+/// switched off (cutting live connections, like a VPN dropping) and on again.
+pub struct Socks5Proxy {
+    pub addr: std::net::SocketAddr,
+    /// Destinations of every CONNECT request, in order.
+    pub connections: Arc<Mutex<Vec<String>>>,
+    stop: Mutex<tokio_util::sync::CancellationToken>,
+}
+
+impl Socks5Proxy {
+    pub async fn start() -> Arc<Self> {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let proxy = Arc::new(Self {
+            addr,
+            connections: Arc::default(),
+            stop: Mutex::new(tokio_util::sync::CancellationToken::new()),
+        });
+        proxy.serve(listener);
+        proxy
+    }
+
+    pub fn url(&self) -> String {
+        format!("socks5://{}", self.addr)
+    }
+
+    fn serve(self: &Arc<Self>, listener: TcpListener) {
+        let token = self.stop.lock().unwrap().clone();
+        let log = self.connections.clone();
+        tokio::spawn(async move {
+            loop {
+                let sock = tokio::select! {
+                    _ = token.cancelled() => break,
+                    r = listener.accept() => match r { Ok((s, _)) => s, Err(_) => break },
+                };
+                let (log, token) = (log.clone(), token.clone());
+                tokio::spawn(async move {
+                    tokio::select! {
+                        _ = token.cancelled() => {}
+                        _ = relay(sock, log) => {}
+                    }
+                });
+            }
+        });
+    }
+
+    /// Stops listening and cuts every open connection.
+    pub fn switch_off(&self) {
+        self.stop.lock().unwrap().cancel();
+    }
+
+    /// Listens again on the same address.
+    pub async fn switch_on(self: &Arc<Self>) {
+        *self.stop.lock().unwrap() = tokio_util::sync::CancellationToken::new();
+        let mut tries = 0;
+        let listener = loop {
+            match TcpListener::bind(self.addr).await {
+                Ok(l) => break l,
+                Err(e) if tries < 50 => {
+                    tries += 1;
+                    let _ = e;
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                }
+                Err(e) => panic!("can't listen again on {}: {e}", self.addr),
+            }
+        };
+        self.serve(listener);
+    }
+}
+
+async fn relay(mut c: TcpStream, log: Arc<Mutex<Vec<String>>>) -> std::io::Result<()> {
+    // Greeting: VER NMETHODS METHODS... -> choose "no authentication".
+    let mut head = [0u8; 2];
+    c.read_exact(&mut head).await?;
+    let mut methods = vec![0u8; head[1] as usize];
+    c.read_exact(&mut methods).await?;
+    c.write_all(&[5, 0]).await?;
+    // Request: VER CMD RSV ATYP ADDR PORT
+    let mut req = [0u8; 4];
+    c.read_exact(&mut req).await?;
+    let host = match req[3] {
+        1 => {
+            let mut a = [0u8; 4];
+            c.read_exact(&mut a).await?;
+            std::net::Ipv4Addr::from(a).to_string()
+        }
+        3 => {
+            let mut len = [0u8; 1];
+            c.read_exact(&mut len).await?;
+            let mut name = vec![0u8; len[0] as usize];
+            c.read_exact(&mut name).await?;
+            String::from_utf8_lossy(&name).into_owned()
+        }
+        4 => {
+            let mut a = [0u8; 16];
+            c.read_exact(&mut a).await?;
+            format!("[{}]", std::net::Ipv6Addr::from(a))
+        }
+        _ => return Ok(()),
+    };
+    let mut port = [0u8; 2];
+    c.read_exact(&mut port).await?;
+    let target = format!("{host}:{}", u16::from_be_bytes(port));
+    log.lock().unwrap().push(target.clone());
+    let Ok(mut upstream) = TcpStream::connect(&target).await else {
+        c.write_all(&[5, 5, 0, 1, 0, 0, 0, 0, 0, 0]).await?;
+        return Ok(());
+    };
+    c.write_all(&[5, 0, 0, 1, 0, 0, 0, 0, 0, 0]).await?;
+    tokio::io::copy_bidirectional(&mut c, &mut upstream).await?;
+    Ok(())
+}
+
+/// Accepts TCP connections and only counts them: shows whether anything tried to connect.
+pub struct Honeypot {
+    pub addr: std::net::SocketAddr,
+    pub hits: Arc<AtomicUsize>,
+}
+
+impl Honeypot {
+    pub async fn start() -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let hits = Arc::new(AtomicUsize::new(0));
+        let h = hits.clone();
+        tokio::spawn(async move {
+            while let Ok((s, _)) = listener.accept().await {
+                h.fetch_add(1, Ordering::SeqCst);
+                drop(s);
+            }
+        });
+        Self { addr, hits }
+    }
+}

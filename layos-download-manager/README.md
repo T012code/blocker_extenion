@@ -75,6 +75,10 @@ Magnet links clicked in the browser, `magnet:` links added by hand, and `.torren
 
 When a torrent finishes, it keeps sharing (*Sharing* in the list) until you've uploaded as much as you downloaded (a ratio of 1.0), then stops. **Stop sharing** ends it early; the download stays complete. Peers are found through trackers, the DHT and the local network, and the router's port is opened with UPnP when it allows.
 
+### Torrent privacy
+
+By default **torrents wait until a VPN or proxy protects them**, so your IP address is never exposed by accident. In *Proxy* mode everything goes through your VPN provider's SOCKS5 proxy and whatever can't (DHT, UDP trackers, incoming connections, UPnP, local discovery) is switched off. A **kill switch** pauses every torrent the moment the VPN or proxy drops and carries on when it's back. See [PRIVACY.md](PRIVACY.md) for what each mode protects, what it can't, and how it's tested.
+
 ## Taking over browser downloads
 
 The browser extension (in [`extension/`](extension/)) watches downloads in Chrome, Edge, Opera, Brave, Vivaldi and Firefox. When you download a file of a type on its list (archives, programs, video, audio, documents), it cancels the browser's download and hands the link to the download manager, including the cookies, referrer and user agent, so downloads behind a login keep working. It leaves alone:

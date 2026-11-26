@@ -12,6 +12,8 @@ use ldm_engine::{
     DownloadKind, DownloadStatus, Engine, EngineConfig, Event, NewDownload, RequestInfo,
     TorrentSpec,
 };
+use ldm_testkit::{Honeypot, Socks5Proxy};
+use ldm_torrent::privacy::{Privacy, PrivacyMode};
 use ldm_torrent::{CreateTorrentOptions, TorrentOptions, TorrentRunner, create_torrent};
 use librqbit::limits::LimitsConfig;
 use librqbit::spawn_utils::BlockingSpawner;
@@ -102,12 +104,28 @@ async fn seed(path: &Path, upload_bps: Option<u32>) -> Seeder {
 }
 
 async fn manager(dir: &Path, peer: SocketAddr, seed_ratio: f32) -> Engine {
+    manager_with(
+        dir,
+        peer,
+        seed_ratio,
+        Privacy {
+            mode: PrivacyMode::Standard,
+            require_protection: false,
+            ..Default::default()
+        },
+    )
+    .await
+}
+
+async fn manager_with(dir: &Path, peer: SocketAddr, seed_ratio: f32, privacy: Privacy) -> Engine {
     let engine = Engine::open(EngineConfig::new(dir.join("Downloads"))).unwrap();
     let mut opts = TorrentOptions::new(dir.join("ldm-data"));
     opts.dht = false;
     opts.upnp = false;
     opts.seed_ratio = seed_ratio;
     opts.extra_peers = vec![peer];
+    opts.privacy = privacy;
+    opts.check_every = Duration::from_millis(200);
     engine.set_runner("torrent", TorrentRunner::start(opts).await.unwrap());
     engine
 }
@@ -289,4 +307,218 @@ async fn keeps_sharing_after_finishing_until_stopped() {
     // Stopping a torrent that's only sharing leaves it complete.
     engine.pause(id).await.unwrap();
     assert_eq!(engine.get(id).unwrap().status, DownloadStatus::Completed);
+}
+
+// ---------------------------------------------------------------- privacy
+
+async fn wait_bytes(engine: &Engine, id: i64, at_least: u64) {
+    let end = Instant::now() + Duration::from_secs(30);
+    while engine.get(id).unwrap().downloaded < at_least {
+        assert!(
+            Instant::now() < end,
+            "no progress: {:?}",
+            engine.get(id).unwrap()
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
+/// Proxy mode: every connection to a peer goes through the proxy, and nothing listens.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn proxy_mode_sends_everything_through_the_proxy() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("seed");
+    std::fs::create_dir_all(&src).unwrap();
+    let content = data(2 * 1024 * 1024, 21);
+    std::fs::write(src.join("talk.mp4"), &content).unwrap();
+    let seeder = seed(&src.join("talk.mp4"), None).await;
+    let proxy = Socks5Proxy::start().await;
+
+    let privacy = Privacy {
+        mode: PrivacyMode::Proxy { url: proxy.url() },
+        require_protection: true,
+        dht: true,
+        blocklist: None,
+    };
+    let engine = manager_with(dir.path(), seeder.addr, 0.0, privacy).await;
+    let id = engine
+        .add(add_magnet(&seeder.hash, "talk.mp4"))
+        .await
+        .unwrap();
+    wait_status(&engine, id, DownloadStatus::Completed, 60).await;
+    assert_eq!(
+        std::fs::read(engine.get(id).unwrap().save_dir.join("talk.mp4")).unwrap(),
+        content
+    );
+
+    let seen = proxy.connections.lock().unwrap().clone();
+    assert!(
+        seen.contains(&seeder.addr.to_string()),
+        "the peer was reached through the proxy: {seen:?}"
+    );
+}
+
+/// Kill switch: when the proxy drops, the torrent stops and waits; it carries on when
+/// the proxy is back, without ever connecting directly.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn kill_switch_stops_torrents_when_the_proxy_drops() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("seed");
+    std::fs::create_dir_all(&src).unwrap();
+    let content = data(4 * 1024 * 1024, 22);
+    std::fs::write(src.join("course.zip"), &content).unwrap();
+    let seeder = seed(&src.join("course.zip"), Some(768 * 1024)).await;
+    let proxy = Socks5Proxy::start().await;
+
+    let privacy = Privacy {
+        mode: PrivacyMode::Proxy { url: proxy.url() },
+        require_protection: true,
+        dht: false,
+        blocklist: None,
+    };
+    let engine = manager_with(dir.path(), seeder.addr, 0.0, privacy).await;
+    let id = engine
+        .add(add_magnet(&seeder.hash, "course.zip"))
+        .await
+        .unwrap();
+    wait_bytes(&engine, id, 512 * 1024).await;
+
+    proxy.switch_off();
+    let start = Instant::now();
+    wait_status(&engine, id, DownloadStatus::Blocked, 10).await;
+    let blocked_after = start.elapsed();
+    let held = engine.get(id).unwrap();
+    assert!(
+        held.error.as_deref().unwrap_or("").contains("proxy"),
+        "{:?}",
+        held.error
+    );
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    let still = engine.get(id).unwrap();
+    assert_eq!(still.status, DownloadStatus::Blocked);
+    assert!(
+        still.downloaded < content.len() as u64,
+        "nothing finishes while the proxy is down"
+    );
+    assert!(
+        still.downloaded <= held.downloaded + 256 * 1024,
+        "no real progress while blocked"
+    );
+
+    proxy.switch_on().await;
+    wait_status(&engine, id, DownloadStatus::Completed, 60).await;
+    assert_eq!(
+        std::fs::read(engine.get(id).unwrap().save_dir.join("course.zip")).unwrap(),
+        content
+    );
+    println!("kill switch engaged {blocked_after:?} after the proxy dropped");
+}
+
+/// The default: without a VPN or proxy, torrents wait and contact nobody at all.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn default_protection_makes_no_connections_without_a_vpn() {
+    let dir = tempfile::tempdir().unwrap();
+    let honeypot = Honeypot::start().await;
+    let engine = manager_with(dir.path(), honeypot.addr, 0.0, Privacy::default()).await;
+    let id = engine
+        .add(add_magnet(
+            "0123456789abcdef0123456789abcdef01234567",
+            "secret",
+        ))
+        .await
+        .unwrap();
+    wait_status(&engine, id, DownloadStatus::Blocked, 10).await;
+    assert!(
+        engine
+            .get(id)
+            .unwrap()
+            .error
+            .as_deref()
+            .unwrap_or("")
+            .contains("VPN or proxy")
+    );
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    assert_eq!(
+        honeypot.hits.load(std::sync::atomic::Ordering::SeqCst),
+        0,
+        "no peer may be contacted"
+    );
+    // Pausing a waiting torrent works as usual.
+    engine.pause(id).await.unwrap();
+    assert_eq!(engine.get(id).unwrap().status, DownloadStatus::Paused);
+}
+
+/// VPN mode with an adapter that isn't there: blocked, nothing contacted.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn vpn_mode_waits_for_the_adapter() {
+    let dir = tempfile::tempdir().unwrap();
+    let honeypot = Honeypot::start().await;
+    let privacy = Privacy {
+        mode: PrivacyMode::Vpn {
+            interface: "ldm-test-vpn0".into(),
+        },
+        require_protection: true,
+        dht: false,
+        blocklist: None,
+    };
+    // The adapter doesn't exist, so on Linux binding to it fails at start: that's also safe.
+    let engine = Engine::open(EngineConfig::new(dir.path().join("Downloads"))).unwrap();
+    let mut opts = TorrentOptions::new(dir.path().join("ldm-data"));
+    opts.dht = false;
+    opts.upnp = false;
+    opts.extra_peers = vec![honeypot.addr];
+    opts.privacy = privacy;
+    opts.check_every = Duration::from_millis(200);
+    match TorrentRunner::start(opts).await {
+        Ok(runner) => {
+            engine.set_runner("torrent", runner);
+            let id = engine
+                .add(add_magnet("0123456789abcdef0123456789abcdef01234567", "x"))
+                .await
+                .unwrap();
+            wait_status(&engine, id, DownloadStatus::Blocked, 10).await;
+            assert!(
+                engine
+                    .get(id)
+                    .unwrap()
+                    .error
+                    .as_deref()
+                    .unwrap_or("")
+                    .contains("ldm-test-vpn0")
+            );
+        }
+        Err(e) => assert!(format!("{e:#}").contains("ldm-test-vpn0"), "{e:#}"),
+    }
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    assert_eq!(honeypot.hits.load(std::sync::atomic::Ordering::SeqCst), 0);
+}
+
+/// VPN mode with a working adapter (loopback here): traffic is tied to it and flows.
+#[cfg(target_os = "linux")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn vpn_mode_downloads_over_the_adapter() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("seed");
+    std::fs::create_dir_all(&src).unwrap();
+    let content = data(1024 * 1024, 23);
+    std::fs::write(src.join("doc.pdf"), &content).unwrap();
+    let seeder = seed(&src.join("doc.pdf"), None).await;
+    let privacy = Privacy {
+        mode: PrivacyMode::Vpn {
+            interface: "lo".into(),
+        },
+        require_protection: true,
+        dht: false,
+        blocklist: None,
+    };
+    let engine = manager_with(dir.path(), seeder.addr, 0.0, privacy).await;
+    let id = engine
+        .add(add_magnet(&seeder.hash, "doc.pdf"))
+        .await
+        .unwrap();
+    wait_status(&engine, id, DownloadStatus::Completed, 60).await;
+    assert_eq!(
+        std::fs::read(engine.get(id).unwrap().save_dir.join("doc.pdf")).unwrap(),
+        content
+    );
 }

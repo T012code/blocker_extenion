@@ -29,7 +29,7 @@ export function percent(done, size) {
 
 /** What a download can do now, as the pop-up shows it. */
 export function action(status) {
-  if (status === 'downloading' || status === 'connecting' || status === 'seeding') return 'pause';
+  if (status === 'downloading' || status === 'connecting' || status === 'seeding' || status === 'blocked') return 'pause';
   if (status === 'paused' || status === 'failed' || status === 'queued' || status === 'needsRefresh') return 'continue';
   return null;
 }
@@ -43,4 +43,5 @@ export const STATUS_TEXT = {
   failed: 'Failed',
   needsRefresh: 'Link expired',
   seeding: 'Sharing',
+  blocked: 'Waiting for VPN',
 };

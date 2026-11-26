@@ -52,12 +52,17 @@ pub enum DownloadStatus {
     NeedsRefresh,
     /// A finished torrent still sharing with other people.
     Seeding,
+    /// Held back by privacy protection: waiting for the VPN or proxy (kill switch).
+    Blocked,
 }
 
 impl DownloadStatus {
     /// Running now (pausing it makes sense).
     pub fn is_active(self) -> bool {
-        matches!(self, Self::Connecting | Self::Downloading | Self::Seeding)
+        matches!(
+            self,
+            Self::Connecting | Self::Downloading | Self::Seeding | Self::Blocked
+        )
     }
 }
 

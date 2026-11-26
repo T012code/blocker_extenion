@@ -118,6 +118,7 @@ function row(d) {
   }
   if (d.status === 'seeding') parts.push('done, sharing with others');
   if (d.status === 'needsRefresh') parts.push('download it again from the page to continue');
+  if (d.status === 'blocked' && d.error) parts.push(d.error);
   meta.textContent = parts.filter(Boolean).join(' · ');
   if (d.kind === 'torrent' || d.kind === 'video') {
     const tag = document.createElement('span');
