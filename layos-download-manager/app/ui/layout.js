@@ -69,7 +69,10 @@ export function initLayout() {
     else if (k === 'j') { e.preventDefault(); toggleDetails(); }
   });
   addEventListener('resize', apply);
+  // Saved sizes apply at once on start, without animating from the defaults.
+  document.body.classList.add('layout-init');
   apply();
+  requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove('layout-init')));
   return { toggleSidebar, toggleDetails, state: s };
 }
 

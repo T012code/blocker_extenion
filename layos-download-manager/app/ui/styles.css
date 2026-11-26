@@ -51,7 +51,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* ---------- layout: side bar | splitter | main (list, splitter, details) */
 .app { display: grid; grid-template-columns: var(--sidebar-w) 0 minmax(0, 1fr); height: 100vh; transition: grid-template-columns var(--dur-base) var(--ease-out); }
 .app.sidebar-collapsed { grid-template-columns: var(--rail-w) 0 minmax(0, 1fr); }
-body.resizing .app, body.resizing .details { transition: none; }
+body.resizing .app, body.resizing .details, body.layout-init .app, body.layout-init .details { transition: none; }
 body.resizing, body.resizing * { cursor: col-resize !important; user-select: none; }
 body.resizing.rows, body.resizing.rows * { cursor: row-resize !important; }
 body.resizing-x, body.resizing-x * { cursor: col-resize !important; user-select: none; }
