@@ -2,7 +2,7 @@
 
 import { invoke, listen, pick } from './backend.js';
 import { bytes } from './format.js';
-import { fillSectionSelect, info, run, toast } from './app.js';
+import { allDownloads, currentQueue, fillSectionSelect, info, queues, run, toast, viewDownloads } from './app.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -28,6 +28,12 @@ export function openAdd({ url = '' } = {}) {
   run(invoke('get_settings'), 'Couldn\'t read settings').then((s) => {
     fillSectionSelect($('add-sections'), s?.defaultConnections ?? 8);
   });
+  $('add-queue').replaceChildren(
+    Object.assign(document.createElement('option'), { value: '', textContent: 'No queue (start now)' }),
+    ...queues.map((q) => Object.assign(document.createElement('option'), { value: String(q.id), textContent: `${q.name}${q.running ? ' (running)' : ''}` })),
+  );
+  // Adding while looking at a queue puts it in that queue.
+  $('add-queue').value = currentQueue() ? String(currentQueue().id) : '';
   $('dlg-add').showModal();
   $('add-url').focus();
   if (url) check();
@@ -132,11 +138,12 @@ async function submitAdd(start) {
     start,
     media: addState.media,
     torrentFile: addState.torrentFile,
+    queueId: $('add-queue').value ? Number($('add-queue').value) : null,
   };
   try {
     await invoke('add', { args });
     $('dlg-add').close();
-    toast(start ? 'Download started' : 'Added to the list');
+    toast(args.queueId ? `Added to ${queues.find((q) => q.id === args.queueId)?.name}` : start ? 'Download started' : 'Added to the list');
   } catch (e) {
     showError($('add-error'), String(e?.message ?? e));
   }
@@ -191,14 +198,57 @@ async function submitBrowser(start) {
 
 // ---------------------------------------------------------------- remove
 
-let toRemove = [];
+let removeScopes = {};
 
-export function openRemove(list) {
-  if (!list.length) return;
-  toRemove = list;
-  $('remove-text').textContent = list.length === 1 ? list[0].fileName : `${list.length} downloads`;
+/** Remove downloads: the selection, everything finished, everything failed, or the whole view. */
+export function openRemove(selection) {
+  const all = allDownloads();
+  removeScopes = {
+    selected: selection,
+    finished: all.filter((d) => d.status === 'completed'),
+    failed: all.filter((d) => d.status === 'failed' || d.status === 'needsRefresh'),
+    view: viewDownloads(),
+  };
+  const label = (n) => `${n} download${n === 1 ? '' : 's'}`;
+  $('scope-selected').textContent = selection.length === 1 ? `Selected: ${selection[0].fileName}` : `Selected (${label(selection.length)})`;
+  $('scope-finished').textContent = `All finished (${label(removeScopes.finished.length)})`;
+  $('scope-failed').textContent = `All failed or expired (${label(removeScopes.failed.length)})`;
+  $('scope-view').textContent = `Everything in this view (${label(removeScopes.view.length)})`;
+  for (const r of $('dlg-remove').querySelectorAll('input[name="scope"]')) {
+    r.disabled = removeScopes[r.value].length === 0;
+  }
+  const first = ['selected', 'finished', 'failed', 'view'].find((k) => removeScopes[k].length);
+  if (!first) return toast('Nothing to remove');
+  $('dlg-remove').querySelector(`input[name="scope"][value="${first}"]`).checked = true;
   $('remove-files').checked = false;
   $('dlg-remove').showModal();
+}
+
+// ---------------------------------------------------------------- queues
+
+let editingQueue = null;
+
+export function openQueue(q = null) {
+  editingQueue = q;
+  $('queue-title').textContent = q ? 'Rename queue' : 'New queue';
+  $('queue-ok').textContent = q ? 'Save' : 'Create';
+  $('queue-name').value = q?.name ?? '';
+  $('queue-max').replaceChildren(...[1, 2, 3, 4, 5, 6, 8, 10].map((n) => Object.assign(document.createElement('option'), { value: String(n), textContent: String(n) })));
+  $('queue-max').value = String(q?.maxActive ?? 2);
+  $('dlg-queue').showModal();
+  $('queue-name').focus();
+}
+
+let deletingQueue = null;
+
+export function openDeleteQueue(q, count) {
+  deletingQueue = q;
+  $('delqueue-title').textContent = `Delete "${q.name}"`;
+  $('delqueue-text').textContent = count ? `It has ${count} download${count === 1 ? '' : 's'}.` : 'It has no downloads.';
+  $('delqueue-form').elements.dq.value = 'keep';
+  $('delqueue-files').checked = false;
+  $('delqueue-files').disabled = true;
+  $('dlg-delqueue').showModal();
 }
 
 // ---------------------------------------------------------------- settings
@@ -256,8 +306,13 @@ export async function openSettings(tab = 'general') {
   f.categoryFolders.checked = current.categoryFolders;
   f.askForBrowserDownloads.checked = current.askForBrowserDownloads;
   f.closeToTray.checked = current.closeToTray;
+  f.minimizeToTray.checked = current.minimizeToTray;
+  f.launchOnStartup.checked = current.launchOnStartup;
+  f.startMinimized.checked = current.startMinimized;
+  f.startMinimized.disabled = !current.launchOnStartup;
   f.notifyOnComplete.checked = current.notifyOnComplete;
   f.openTorrentFiles.checked = current.openTorrentFiles;
+  f.handleTorrentLinks.checked = current.handleTorrentLinks;
   fillSectionSelect($('set-sections'), current.defaultConnections);
   f.globalSpeedLimitKB.value = Math.round((current.globalSpeedLimit || 0) / 1024);
   const p = current.privacy;
@@ -292,8 +347,12 @@ function readSettings() {
     categoryFolders: f.categoryFolders.checked,
     askForBrowserDownloads: f.askForBrowserDownloads.checked,
     closeToTray: f.closeToTray.checked,
+    minimizeToTray: f.minimizeToTray.checked,
+    launchOnStartup: f.launchOnStartup.checked,
+    startMinimized: f.startMinimized.checked,
     notifyOnComplete: f.notifyOnComplete.checked,
     openTorrentFiles: f.openTorrentFiles.checked,
+    handleTorrentLinks: f.handleTorrentLinks.checked,
     defaultConnections: Number($('set-sections').value),
     globalSpeedLimit: Math.max(0, Number(f.globalSpeedLimitKB.value) || 0) * 1024,
     seedRatio: Math.max(0, Number(f.seedRatio.value) || 0),
@@ -355,12 +414,41 @@ export function initDialogs() {
   // Remove
   $('dlg-remove').addEventListener('close', async () => {
     if ($('dlg-remove').returnValue !== 'remove') return;
-    await run(invoke('remove', { ids: toRemove.map((d) => d.id), deleteFiles: $('remove-files').checked }), 'Couldn\'t remove');
+    const scope = $('dlg-remove').querySelector('input[name="scope"]:checked')?.value ?? 'selected';
+    const ids = (removeScopes[scope] ?? []).map((d) => d.id);
+    if (!ids.length) return;
+    await run(invoke('remove', { ids, deleteFiles: $('remove-files').checked }), 'Couldn\'t remove');
+    toast(`Removed ${ids.length} download${ids.length === 1 ? '' : 's'}`);
+  });
+
+  // Queues
+  $('queue-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = $('queue-name').value.trim();
+    const maxActive = Number($('queue-max').value);
+    if (editingQueue) await run(invoke('queue_update', { id: editingQueue.id, name, maxActive }), 'Couldn\'t rename the queue');
+    else await run(invoke('queue_create', { name, maxActive }), 'Couldn\'t create the queue');
+    $('dlg-queue').close();
+  });
+  $('queue-cancel').addEventListener('click', () => $('dlg-queue').close());
+  for (const r of $('delqueue-form').elements.dq) {
+    r.addEventListener('change', () => {
+      const remove = $('delqueue-form').elements.dq.value === 'remove';
+      $('delqueue-files').disabled = !remove;
+      if (!remove) $('delqueue-files').checked = false;
+    });
+  }
+  $('dlg-delqueue').addEventListener('close', async () => {
+    if ($('dlg-delqueue').returnValue !== 'delete' || !deletingQueue) return;
+    const removeDownloads = $('delqueue-form').elements.dq.value === 'remove';
+    await run(invoke('queue_delete', { id: deletingQueue.id, removeDownloads, deleteFiles: removeDownloads && $('delqueue-files').checked }), 'Couldn\'t delete the queue');
+    toast(`Deleted queue "${deletingQueue.name}"`);
   });
 
   // Settings
   for (const t of document.querySelectorAll('.tab')) t.addEventListener('click', () => showTab(t.dataset.tab));
   for (const r of form().mode) r.addEventListener('change', syncModeDetails);
+  form().launchOnStartup.addEventListener('change', (e) => { form().startMinimized.disabled = !e.target.checked; });
   $('set-browse').addEventListener('click', async () => {
     const dir = await pick({ directory: true, title: 'Download folder' });
     if (dir) form().downloadDir.value = dir;

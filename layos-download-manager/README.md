@@ -4,7 +4,13 @@
 
 A free download manager for Windows. It speeds up downloads by fetching each file in many sections at once, resumes broken downloads, catches downloads from your browser, and grabs videos from web pages.
 
-> **Status:** in development. Done and tested: the download engine, the browser extension and bridge, the video download button, torrents with privacy protection, and the desktop app. Next: the installer (bundling yt-dlp and ffmpeg, registering the browser bridge), then queues and the scheduler.
+> **Status:** in development. Done and tested: the download engine, the browser extension and bridge, the video download button, torrents with privacy protection, the desktop app with queues, and the Windows installer set-up. Next: the scheduler (start and stop queues at set times, shut down when done) and the site grabber.
+
+## Installing on Windows
+
+The installer (`Layó's Download Manager_x.y.z_x64-setup.exe`, built by GitHub Actions) installs for the current user, with no admin rights needed. It includes the app, the browser bridge, yt-dlp and ffmpeg, and registers the bridge with Chrome, Edge, Firefox, Opera, Brave and Vivaldi. Uninstalling removes all of that, the magnet and `.torrent` associations, and the start-with-Windows entry. Then add the browser extension from `extension/dist`.
+
+Windows may show "Windows protected your PC" the first time, because the installer isn't code-signed yet: click **More info → Run anyway**. On Windows 10 and 11, if another torrent app is already chosen for magnet links, Windows asks which app to use the first time you open one.
 
 ## How the multi-section download works
 
@@ -66,8 +72,11 @@ The main window lists your downloads with their progress, speed and time left. C
 - **Continue, Pause, Remove** (Ctrl+R, Ctrl+P, Delete) work on one or many selected downloads; double-click opens a finished file.
 - **From the browser:** downloads the extension sends can be confirmed first, and "Download all links" lets you tick which files to get.
 - **Settings:** download folder and category folders, default sections, overall speed limit, browser behaviour, the tray, notifications, and **Torrents & privacy** (mode, proxy with a Test button, VPN adapter, sharing ratio, blocklist).
-- Closing the window keeps it running in the tray, where you can pause or continue everything.
-- Light and dark follow Windows. *Developed by Layó* in the corner links to [layothedeveloper.com](https://layothedeveloper.com).
+- **Queues:** create queues in the sidebar, each running a set number of downloads at once, oldest first. **Start queue** and **Stop queue** run or pause it; downloads can be added straight into a queue or moved between queues; **Delete queue** keeps its downloads in the list or removes them (and their files, if you want).
+- **Removing in groups:** **Remove** clears the selection, every finished download, every failed or expired one, or everything in the current view, optionally deleting the files too.
+- **Starts with Windows** (in the tray, without opening the window) and can **minimize to the tray**; both are settings. Closing the window keeps it running in the tray, where you can pause or continue everything.
+- **Magnet links and .torrent files** anywhere in Windows open in the app (a setting; turning it off removes the association).
+- Light and dark follow Windows. There are no pill-shaped controls: buttons, labels and toggles are rectangles, and a test checks every element on screen for it. *Developed by Layó* in the corner links to [layothedeveloper.com](https://layothedeveloper.com).
 
 ## Download button on videos
 

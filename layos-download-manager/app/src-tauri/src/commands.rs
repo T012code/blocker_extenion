@@ -71,6 +71,9 @@ pub struct AddArgs {
     /// A .torrent file on this computer.
     #[serde(default)]
     torrent_file: Option<PathBuf>,
+    /// Put it in this queue (it then starts when the queue gets to it).
+    #[serde(default)]
+    queue_id: Option<i64>,
 }
 
 #[tauri::command]
@@ -108,8 +111,12 @@ pub async fn add(state: S<'_>, args: AddArgs) -> R<i64> {
     }
     new.save_dir = args.save_dir.filter(|d| !d.as_os_str().is_empty());
     new.connections = args.connections;
-    new.start = args.start;
-    state.engine.add(new).await.map_err(err)
+    new.start = args.start && args.queue_id.is_none();
+    let id = state.engine.add(new).await.map_err(err)?;
+    if let Some(q) = args.queue_id {
+        state.queues.assign(&[id], Some(q))?;
+    }
+    Ok(id)
 }
 
 #[tauri::command]
@@ -218,13 +225,19 @@ pub fn get_settings(state: S) -> AppSettings {
 }
 
 #[tauri::command]
-pub async fn save_settings(state: S<'_>, settings: AppSettings) -> R<()> {
+pub async fn save_settings(app: tauri::AppHandle, state: S<'_>, settings: AppSettings) -> R<()> {
     // Reject a broken privacy setup before anything changes.
     privacy::plan(&settings.privacy, cfg!(windows))?;
     let old = state.settings.lock().unwrap().clone();
     settings.save(&state.engine).map_err(err)?;
     settings.apply(&state.engine);
     state.set_ask(settings.ask_for_browser_downloads);
+    if old.handle_torrent_links != settings.handle_torrent_links {
+        crate::associations::apply(settings.handle_torrent_links);
+    }
+    if old.launch_on_startup != settings.launch_on_startup {
+        crate::apply_autostart(&app, settings.launch_on_startup);
+    }
     let restart = old.privacy != settings.privacy || old.seed_ratio != settings.seed_ratio;
     *state.settings.lock().unwrap() = settings;
     if restart {
@@ -282,4 +295,53 @@ pub fn show_in_folder(state: S, id: i64) -> R<()> {
 #[tauri::command]
 pub fn open_portfolio() -> R<()> {
     tauri_plugin_opener::open_url("https://layothedeveloper.com", None::<&str>).map_err(err)
+}
+
+// ---------------------------------------------------------------- queues
+
+use ldm_service::queues::Queue;
+
+#[tauri::command]
+pub fn queues_list(state: S) -> Vec<Queue> {
+    state.queues.list()
+}
+
+#[tauri::command]
+pub fn queue_create(state: S, name: String, max_active: u8) -> Queue {
+    state.queues.create(&name, max_active)
+}
+
+#[tauri::command]
+pub fn queue_update(state: S, id: i64, name: Option<String>, max_active: Option<u8>) -> R<Queue> {
+    state.queues.update(id, name.as_deref(), max_active)
+}
+
+#[tauri::command]
+pub fn queue_start(state: S, id: i64) -> R<()> {
+    state.queues.start_queue(id)
+}
+
+#[tauri::command]
+pub async fn queue_stop(state: S<'_>, id: i64) -> R<()> {
+    state.queues.stop_queue(id).await
+}
+
+/// Deletes a queue; its downloads stay in the list unless `remove_downloads`.
+#[tauri::command]
+pub async fn queue_delete(
+    state: S<'_>,
+    id: i64,
+    remove_downloads: bool,
+    delete_files: bool,
+) -> R<()> {
+    state
+        .queues
+        .delete_queue(id, remove_downloads, delete_files)
+        .await
+}
+
+/// Moves downloads into a queue, or out of any queue with `None`.
+#[tauri::command]
+pub fn set_queue(state: S, ids: Vec<i64>, queue_id: Option<i64>) -> R<()> {
+    state.queues.assign(&ids, queue_id)
 }

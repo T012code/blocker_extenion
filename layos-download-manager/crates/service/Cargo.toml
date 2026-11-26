@@ -17,3 +17,8 @@ ldm-torrent = { path = "../torrent" }
 tokio.workspace = true
 tracing.workspace = true
 serde_json.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+ldm-testkit = { path = "../testkit" }
+tempfile = "3"

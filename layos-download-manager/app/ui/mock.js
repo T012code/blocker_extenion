@@ -4,6 +4,18 @@
 const listeners = new Map();
 const downloads = new Map();
 let nextId = 1;
+let queues = [];
+const emitQueues = () => emit('queues', queues);
+function fillQueues() {
+  for (const q of queues.filter((x) => x.running)) {
+    const mine = [...downloads.values()].filter((d) => d.queueId === q.id);
+    let free = q.maxActive - mine.filter((d) => d.status === 'downloading').length;
+    for (const d of mine.filter((x) => x.status === 'queued').sort((a, b) => a.id - b.id)) {
+      if (free-- <= 0) break;
+      update(d, { status: 'downloading' });
+    }
+  }
+}
 let settings = {
   downloadDir: 'C:\\Users\\Layo\\Downloads\\Layó\'s Download Manager',
   categoryFolders: true,
@@ -11,8 +23,12 @@ let settings = {
   globalSpeedLimit: 0,
   askForBrowserDownloads: true,
   closeToTray: true,
+  minimizeToTray: false,
+  launchOnStartup: true,
+  startMinimized: true,
   notifyOnComplete: true,
   openTorrentFiles: true,
+  handleTorrentLinks: true,
   seedRatio: 1,
   privacy: { mode: { type: 'private' }, requireProtection: true, dht: true, blocklist: null },
 };
@@ -43,7 +59,7 @@ function make({ url, fileName, connections, start, size, kind = 'http', status }
     id, request: { url }, fileName: name, saveDir: `${settings.downloadDir}\\${category(name)}`,
     category: category(name), size: size ?? 48 * 1024 * 1024, resumable: kind === 'http', status: status ?? (start ? 'downloading' : 'queued'),
     error: null, downloaded: 0, segments: [], connections: connections || settings.defaultConnections,
-    kind: { type: kind }, createdAt: Date.now(),
+    kind: { type: kind }, createdAt: Date.now(), queueId: null,
   };
   downloads.set(id, d);
   emit('engine', { type: 'added', download: d });
@@ -61,6 +77,7 @@ function plan(d) {
 }
 
 function tick() {
+  fillQueues();
   for (const d of downloads.values()) {
     if (d.status === 'blocked' && protectedNow()) update(d, { status: 'downloading', error: null });
     if (d.status !== 'downloading') continue;
@@ -122,7 +139,9 @@ export async function invoke(cmd, args) {
     case 'add': {
       const a = args.args;
       const kind = /^magnet:/.test(a.url) || a.torrentFile ? 'torrent' : a.media ? 'media' : 'http';
-      return make({ url: a.url || a.torrentFile, fileName: a.fileName || a.media?.title, connections: a.connections, start: a.start, kind }).id;
+      const d = make({ url: a.url || a.torrentFile, fileName: a.fileName || a.media?.title, connections: a.connections, start: a.start && !a.queueId, kind });
+      if (a.queueId) update(d, { queueId: a.queueId });
+      return d.id;
     }
     case 'probe': return { finalUrl: args.url, size: 734003200, resumable: true, fileName: decodeURIComponent(args.url.split('/').pop()), contentType: 'application/octet-stream' };
     case 'media_formats': return { title: 'Keynote 2026', choices: [
@@ -152,6 +171,41 @@ export async function invoke(cmd, args) {
       update(d, {});
       return args.connections;
     }
+    case 'queues_list': return structuredClone(queues);
+    case 'queue_create': {
+      const q = { id: queues.reduce((m, x) => Math.max(m, x.id), 0) + 1, name: args.name || `Queue ${queues.length + 1}`, maxActive: args.maxActive, running: false };
+      queues.push(q); emitQueues(); return q;
+    }
+    case 'queue_update': {
+      const q = queues.find((x) => x.id === args.id);
+      if (args.name) q.name = args.name;
+      if (args.maxActive) q.maxActive = args.maxActive;
+      emitQueues(); return q;
+    }
+    case 'queue_start': {
+      const q = queues.find((x) => x.id === args.id);
+      q.running = true;
+      for (const d of downloads.values()) if (d.queueId === q.id && d.status === 'paused') update(d, { status: 'queued' });
+      emitQueues(); fillQueues(); return null;
+    }
+    case 'queue_stop': {
+      const q = queues.find((x) => x.id === args.id);
+      q.running = false;
+      for (const d of downloads.values()) if (d.queueId === q.id && d.status === 'downloading') update(d, { status: 'paused' });
+      emitQueues(); return null;
+    }
+    case 'queue_delete': {
+      queues = queues.filter((x) => x.id !== args.id);
+      for (const d of [...downloads.values()]) {
+        if (d.queueId !== args.id) continue;
+        if (args.removeDownloads) { downloads.delete(d.id); emit('engine', { type: 'removed', id: d.id }); }
+        else update(d, { queueId: null, status: d.status === 'downloading' ? 'paused' : d.status });
+      }
+      emitQueues(); return null;
+    }
+    case 'set_queue':
+      for (const id of args.ids) { const d = downloads.get(id); if (d) update(d, { queueId: args.queueId }); }
+      return null;
     case 'get_settings': return structuredClone(settings);
     case 'save_settings': settings = structuredClone(args.settings); return null;
     case 'network_adapters': return ['Ethernet', 'Wi-Fi', 'Mullvad', 'NordLynx'];

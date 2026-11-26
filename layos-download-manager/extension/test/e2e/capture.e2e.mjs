@@ -27,6 +27,27 @@ const work = mkdtempSync(join(tmpdir(), 'ldm-e2e-'));
 const dataDir = join(work, 'data');
 const ipc = join(work, 'ldm.sock');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Fails if anything on the page (including inside shadow roots) is capsule- or circle-shaped. */
+async function assertNoPills(page, where) {
+  const pills = await page.evaluate(() => {
+    const out = [];
+    const walk = (root) => {
+      for (const el of root.querySelectorAll('*')) {
+        if (el.shadowRoot) walk(el.shadowRoot);
+        const r = el.getBoundingClientRect();
+        if (r.width < 4 || r.height < 4) continue;
+        const cs = getComputedStyle(el);
+        if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+        const radius = Math.max(...['TopLeft', 'TopRight', 'BottomLeft', 'BottomRight'].map((c) => parseFloat(cs[`border${c}Radius`]) || 0));
+        if (radius > 0 && radius >= Math.min(r.width, r.height) / 2 - 0.5) out.push(`${el.tagName.toLowerCase()}.${el.className} ${Math.round(r.width)}x${Math.round(r.height)} r${radius}`);
+      }
+    };
+    walk(document);
+    return out;
+  });
+  assert.deepEqual(pills, [], `pill shapes in ${where}: ${pills.join(', ')}`);
+}
 const saved = (rel) => join(dataDir, 'Downloads', rel);
 
 // ---- A web site with downloads behind a login cookie. Files support byte ranges.
@@ -256,6 +277,13 @@ try {
   assert.ok(existsSync(saved('Compressed/paced.iso.ldmpart')), 'the part file is kept while paused');
   if (shots) await popup.screenshot({ path: join(shots, 'popup-paused.png') });
   console.log(`ok - Pause in the pop-up stops the download and keeps its progress (${pausedText})`);
+  await assertNoPills(popup, 'the pop-up');
+  const opts = await managed.newPage();
+  await opts.goto(`chrome-extension://${EXTENSION_ID}/options/options.html`);
+  await opts.locator('#status-badge').waitFor();
+  await assertNoPills(opts, 'the settings page');
+  await opts.close();
+  console.log('ok - no pill shapes in the pop-up or settings page');
 
   pacing = false;
   const before = rangeRequests;
@@ -287,6 +315,8 @@ try {
       assert.equal(await vp.locator('ldm-video-download .item', { hasText: 'Audio only' }).count(), 0, 'a plain video file is not audio');
     }
     console.log(`ok - the menu lists: ${(await menuItems.allTextContents()).join(' | ')}`);
+    await assertNoPills(vp, 'the video button and its menu');
+    console.log('ok - no pill shapes on the video button or its menu');
     await vp.locator('ldm-video-download .item', { hasText: 'Video file MP4' }).click();
     await vp.locator('ldm-video-download .note.ok').waitFor({ timeout: 15_000 });
     const clip = readFileSync(join(mediaDir, 'clip.mp4'));

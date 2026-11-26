@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 use ldm_engine::{DownloadKind, DownloadStatus, Engine, EngineConfig, Event};
 use ldm_ipc::{BrowserDownload, Source};
 use ldm_media::{MediaRunner, Tools};
+use ldm_service::queues::Queues;
 use ldm_service::{Frontend, Service};
 use ldm_torrent::{TorrentOptions, TorrentRunner};
 use serde::Serialize;
@@ -17,6 +18,7 @@ use crate::settings::AppSettings;
 pub struct AppState {
     pub engine: Engine,
     pub service: Service,
+    pub queues: Arc<Queues>,
     pub settings: Mutex<AppSettings>,
     pub tools: Tools,
     /// Shared with the browser bridge: show the "add download" window for browser downloads.
@@ -98,9 +100,11 @@ impl AppState {
         });
         let service = Service::new(engine.clone(), frontend).with_media_tools(tools.clone());
 
+        let queues = Queues::start(engine.clone());
         let state = Arc::new(Self {
             engine,
             service,
+            queues,
             settings: Mutex::new(settings),
             tools,
             ask,
@@ -109,6 +113,14 @@ impl AppState {
         });
         state.start_torrents().await;
         state.forward_events(app.clone());
+        // Queue changes go to the window too.
+        let mut qrx = state.queues.subscribe();
+        let qapp = app.clone();
+        tauri::async_runtime::spawn(async move {
+            while let Ok(list) = qrx.recv().await {
+                let _ = qapp.emit("queues", &list);
+            }
+        });
 
         // Listen for the browser extension.
         let service = state.service.clone();

@@ -504,6 +504,21 @@ impl Engine {
         Ok(())
     }
 
+    /// Marks a stopped download as waiting (for a queue to start it). Running and
+    /// finished downloads are left alone.
+    pub fn requeue(&self, id: DownloadId) -> Result<()> {
+        self.get(id)?;
+        if self.is_running(id) {
+            return Ok(());
+        }
+        self.inner.update(id, true, |d| {
+            if matches!(d.status, DownloadStatus::Paused | DownloadStatus::Failed) {
+                d.status = DownloadStatus::Queued;
+            }
+        });
+        Ok(())
+    }
+
     /// Registers the runner for a kind of download ("torrent" or "media").
     pub fn set_runner(&self, name: &'static str, runner: Arc<dyn Runner>) {
         self.inner.runners.lock().unwrap().insert(name, runner);

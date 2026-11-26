@@ -22,9 +22,17 @@ pub struct AppSettings {
     pub ask_for_browser_downloads: bool,
     /// Closing the window keeps the app running in the tray.
     pub close_to_tray: bool,
+    /// Minimizing the window hides it to the tray.
+    pub minimize_to_tray: bool,
+    /// Start Layó's Download Manager when you sign in to Windows.
+    pub launch_on_startup: bool,
+    /// When started with Windows, stay in the tray instead of opening the window.
+    pub start_minimized: bool,
     pub notify_on_complete: bool,
     /// Start torrents from downloaded .torrent files.
     pub open_torrent_files: bool,
+    /// Open magnet links and .torrent files from anywhere in Windows with this app.
+    pub handle_torrent_links: bool,
     /// Share finished torrents until uploaded / size reaches this.
     pub seed_ratio: f32,
     pub privacy: Privacy,
@@ -39,8 +47,12 @@ impl Default for AppSettings {
             global_speed_limit: 0,
             ask_for_browser_downloads: true,
             close_to_tray: true,
+            minimize_to_tray: false,
+            launch_on_startup: true,
+            start_minimized: true,
             notify_on_complete: true,
             open_torrent_files: true,
+            handle_torrent_links: true,
             seed_ratio: 1.0,
             privacy: Privacy::default(),
         }

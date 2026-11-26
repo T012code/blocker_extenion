@@ -11,7 +11,7 @@ import * as media from './media.js';
 import { describe } from './capture.js';
 import { addHistory } from './history.js';
 import { noteBypass } from './bypass.js';
-import { getHistory } from './history.js';
+import { clearHistory, getHistory } from './history.js';
 
 requests.start();
 capture.start();
@@ -74,6 +74,9 @@ api.runtime.onMessage.addListener((msg, sender, reply) => {
     case 'status':
       Promise.all([native.getState({ maxAgeMs: 0 }), getSettings(), getHistory()])
         .then(([host, settings, history]) => reply({ host, settings, history }));
+      return true;
+    case 'clearHistory':
+      clearHistory().then(() => reply({ ok: true }));
       return true;
     case 'refresh':
       native.refresh().then(reply);

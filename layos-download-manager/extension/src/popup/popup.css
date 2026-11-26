@@ -12,8 +12,8 @@ h2 { font-size: 13px; margin-bottom: 8px; }
 .empty { margin: 0; }
 .dl { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; }
 .dl .name { font-weight: 560; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.dl .bar { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: var(--surface-strong); overflow: hidden; }
-.dl .bar span { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width 400ms ease-out; }
+.dl .bar { grid-column: 1 / -1; height: 6px; border-radius: 1px; background: var(--surface-strong); overflow: hidden; }
+.dl .bar span { display: block; height: 100%; background: var(--accent); border-radius: 1px; transition: width 400ms ease-out; }
 .dl.paused .bar span, .dl.failed .bar span, .dl.needsRefresh .bar span { background: var(--ink-muted); }
 .dl.completed .bar span { background: var(--success); }
 .dl.seeding .bar span { background: var(--pop); }
@@ -31,3 +31,6 @@ footer { display: grid; gap: 10px; }
 .actions { display: flex; gap: 8px; }
 .actions .primary { flex: 1; }
 .credit { justify-content: center; margin: 0; }
+.card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.card-head h2 { margin: 0; }
+.small-btn { padding: 2px 10px; font-size: 12px; }

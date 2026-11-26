@@ -1,0 +1,19 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "externalBin": ["binaries/ldm-native-host"],
+    "resources": {
+      "tools/yt-dlp.exe": "tools/yt-dlp.exe",
+      "tools/ffmpeg.exe": "tools/ffmpeg.exe",
+      "THIRD-PARTY.md": "THIRD-PARTY.md"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "installerHooks": "installer.nsh",
+        "installerIcon": "icons/icon.ico",
+        "displayLanguageSelector": false
+      }
+    }
+  }
+}

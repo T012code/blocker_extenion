@@ -32,7 +32,7 @@
   .wrap.show { display: flex; }
   .btn {
     display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px 0 10px;
-    border: 0; border-radius: 999px; cursor: pointer; font-size: 13px; font-weight: 600; letter-spacing: .01em;
+    border: 0; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; letter-spacing: .01em;
     color: #fafcfe; background: #2866ee; box-shadow: 0 2px 10px rgb(17 26 47 / .35);
     transition: background-color 160ms, transform 160ms;
   }
@@ -42,7 +42,7 @@
   .btn svg { width: 16px; height: 16px; }
   .menu {
     display: none; width: 300px; max-height: 360px; overflow: auto; padding: 6px;
-    border-radius: 14px; background: #ffffff; color: #111a2f; border: 1px solid rgb(17 26 47 / .1);
+    border-radius: 10px; background: #ffffff; color: #111a2f; border: 1px solid rgb(17 26 47 / .1);
     box-shadow: 0 2px 6px rgb(17 26 47 / .08), 0 24px 60px -20px rgb(40 102 238 / .45); font-size: 13px;
   }
   .menu.open { display: block; }
@@ -51,13 +51,13 @@
   .group { padding: 8px 10px 4px; color: #545e6f; font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: .06em; }
   .item {
     width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px;
-    padding: 8px 10px; border: 0; border-radius: 9px; background: transparent; color: inherit;
+    padding: 8px 10px; border: 0; border-radius: 6px; background: transparent; color: inherit;
     font-size: 13px; text-align: left; cursor: pointer;
   }
   .item:hover:not(:disabled) { background: #e9f2fb; }
   .item:disabled { cursor: default; color: #545e6f; }
   .item .size { color: #545e6f; font-size: 12px; white-space: nowrap; }
-  .tag { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px; background: #d9ebff; color: #1b47d3; margin-left: 6px; }
+  .tag { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; background: #d9ebff; color: #1b47d3; margin-left: 6px; }
   .note { padding: 8px 10px; color: #545e6f; font-size: 12px; }
   .note.ok { color: #14874e; font-weight: 600; }
   .note.bad { color: #c92f33; }

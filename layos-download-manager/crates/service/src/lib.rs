@@ -3,6 +3,8 @@
 //! The desktop app and the headless runner both use [`Service`]. The app plugs in a
 //! [`Frontend`] that shows the "add download" window and brings itself to the front.
 
+pub mod queues;
+
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -175,7 +177,7 @@ impl Service {
     ) -> Response {
         let items: Vec<_> = items
             .into_iter()
-            .filter(|i| is_web_url(&i.url) || is_magnet(&i.url))
+            .filter(|i| is_web_url(&i.url) || is_magnet(&i.url) || torrent_file(&i.url).is_some())
             .collect();
         if items.is_empty() {
             return Response::error("no links to download");
@@ -209,6 +211,14 @@ fn is_magnet(url: &str) -> bool {
     url.trim_start()
         .to_ascii_lowercase()
         .starts_with("magnet:?")
+}
+
+/// A .torrent file on this computer, as `file://…/name.torrent` (opened from Windows).
+fn torrent_file(url: &str) -> Option<std::path::PathBuf> {
+    let path = url.strip_prefix("file://")?;
+    path.to_ascii_lowercase()
+        .ends_with(".torrent")
+        .then(|| std::path::PathBuf::from(path))
 }
 
 /// A .torrent file finished downloading: start the torrent it describes.
@@ -247,7 +257,12 @@ async fn open_downloaded_torrent(engine: &Engine, d: &Download) {
 /// Maps what the browser sent to an engine download.
 pub fn to_new_download(item: BrowserDownload, start: bool) -> NewDownload {
     let non_empty = |s: Option<String>| s.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
-    let kind = if is_magnet(&item.url) {
+    let kind = if let Some(path) = torrent_file(&item.url) {
+        DownloadKind::Torrent(TorrentSpec {
+            torrent_file: Some(path),
+            ..Default::default()
+        })
+    } else if is_magnet(&item.url) {
         DownloadKind::Torrent(TorrentSpec {
             magnet: Some(item.url.clone()),
             ..Default::default()

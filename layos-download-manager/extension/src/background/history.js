@@ -16,6 +16,10 @@ export async function addHistory(entry) {
   await store.set({ history: history.slice(0, MAX) });
 }
 
+export async function clearHistory() {
+  await (await area()).set({ history: [] });
+}
+
 export async function getHistory() {
   const { history = [] } = await (await area()).get('history');
   return history;

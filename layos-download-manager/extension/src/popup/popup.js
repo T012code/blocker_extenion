@@ -194,6 +194,10 @@ $('enabled').addEventListener('change', async (e) => {
   load();
 });
 $('options').addEventListener('click', () => api.runtime.openOptionsPage());
+$('clear-history').addEventListener('click', async () => {
+  await api.runtime.sendMessage({ type: 'clearHistory' });
+  showReturned([]);
+});
 $('open-app').addEventListener('click', async () => {
   const r = await api.runtime.sendMessage({ type: 'showApp' });
   if (r?.ok) window.close();

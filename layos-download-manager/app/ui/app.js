@@ -3,7 +3,7 @@
 
 import { invoke, listen } from './backend.js';
 import { STATUS_TEXT, action, bytes, eta, percent, speed } from './format.js';
-import { initDialogs, openAdd, openRemove, openSettings } from './dialogs.js';
+import { initDialogs, openAdd, openDeleteQueue, openQueue, openRemove, openSettings } from './dialogs.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -14,6 +14,8 @@ const live = new Map();
 const selected = new Set();
 let lastClicked = null;
 let filter = 'all';
+/** Queues: { id, name, maxActive, running } */
+export let queues = [];
 let query = '';
 export let info = { sectionPresets: [1, 2, 4, 8, 16, 24, 32, 48, 64], maxConnections: 64 };
 
@@ -47,7 +49,9 @@ function matches(d) {
     case 'stopped': if (!['paused', 'failed', 'needsRefresh', 'queued'].includes(d.status)) return false; break;
     case 'torrents': if (!isTorrent(d)) return false; break;
     case 'all': break;
-    default: if (isTorrent(d) || d.category !== filter) return false;
+    default:
+      if (filter.startsWith('queue:')) { if (d.queueId !== Number(filter.slice(6))) return false; break; }
+      if (isTorrent(d) || d.category !== filter) return false;
   }
   if (!query) return true;
   const q = query.toLowerCase();
@@ -125,6 +129,7 @@ export function render() {
     const shown = list.filter(matches);
     $('rows').replaceChildren(...shown.map(renderRow));
     $('empty').hidden = shown.length > 0;
+    renderQueues(list);
     renderCounts(list);
     renderToolbar();
     renderDetails();
@@ -147,6 +152,53 @@ function renderCounts(list) {
   }
 }
 
+export function currentQueue() {
+  return filter.startsWith('queue:') ? queues.find((q) => q.id === Number(filter.slice(6))) ?? null : null;
+}
+
+function renderQueues(list) {
+  const nav = $('queue-nav');
+  if (filter.startsWith('queue:') && !currentQueue()) filter = 'all';
+  nav.replaceChildren(...queues.map((q) => {
+    const b = document.createElement('button');
+    b.className = `nav-item${filter === `queue:${q.id}` ? ' active' : ''}`;
+    b.dataset.filter = `queue:${q.id}`;
+    const n = document.createElement('span');
+    n.textContent = q.running ? `${q.name} (running)` : q.name;
+    const c = document.createElement('span');
+    c.className = 'count';
+    const count = list.filter((d) => d.queueId === q.id).length;
+    c.textContent = count ? String(count) : '';
+    b.append(n, c);
+    return b;
+  }));
+  for (const b of document.querySelectorAll('#nav > .nav-item')) b.classList.toggle('active', b.dataset.filter === filter);
+  const q = currentQueue();
+  $('queuebar').hidden = !q;
+  if (!q) return;
+  $('qb-name').textContent = q.name;
+  const inQueue = list.filter((d) => d.queueId === q.id);
+  const running = inQueue.filter((d) => isActive(d.status)).length;
+  const waiting = inQueue.filter((d) => d.status === 'queued').length;
+  $('qb-state').textContent = `${q.running ? 'Running' : 'Stopped'} · ${running} downloading · ${waiting} waiting`;
+  $('qb-start').disabled = q.running;
+  $('qb-stop').disabled = !q.running;
+  if (document.activeElement !== $('qb-max')) {
+    $('qb-max').replaceChildren(...[1, 2, 3, 4, 5, 6, 8, 10].map((n) => Object.assign(document.createElement('option'), { value: String(n), textContent: String(n) })));
+    if (![...$('qb-max').options].some((o) => Number(o.value) === q.maxActive)) $('qb-max').append(Object.assign(document.createElement('option'), { value: String(q.maxActive), textContent: String(q.maxActive) }));
+    $('qb-max').value = String(q.maxActive);
+  }
+}
+
+/** The downloads shown right now (for "remove everything in this view"). */
+export function viewDownloads() {
+  return [...downloads.values()].filter(matches);
+}
+
+export function allDownloads() {
+  return [...downloads.values()];
+}
+
 function selectedDownloads() {
   return [...selected].map((id) => downloads.get(id)).filter(Boolean);
 }
@@ -155,7 +207,8 @@ function renderToolbar() {
   const sel = selectedDownloads();
   $('btn-resume').disabled = !sel.some((d) => action(d.status) === 'continue');
   $('btn-pause').disabled = !sel.some((d) => action(d.status) === 'pause');
-  $('btn-delete').disabled = sel.length === 0;
+  // Remove is always available: it can also clear finished or failed downloads.
+  $('btn-delete').disabled = downloads.size === 0;
 }
 
 function renderSpeed() {
@@ -252,6 +305,13 @@ function renderDetails() {
   $('d-error-wrap').hidden = !d.error || d.status === 'completed';
   $('d-error').textContent = d.error ?? '';
   $('d-open').disabled = d.status !== 'completed' && d.status !== 'seeding';
+  if (document.activeElement !== $('d-queue')) {
+    $('d-queue').replaceChildren(
+      Object.assign(document.createElement('option'), { value: '', textContent: 'No queue' }),
+      ...queues.map((q) => Object.assign(document.createElement('option'), { value: String(q.id), textContent: q.name })),
+    );
+    $('d-queue').value = d.queueId != null ? String(d.queueId) : '';
+  }
   renderMap(d, p);
 }
 
@@ -321,19 +381,34 @@ function onRowDoubleClick(e) {
 function bind() {
   $('rows').addEventListener('click', onRowClick);
   $('rows').addEventListener('dblclick', onRowDoubleClick);
-  for (const b of document.querySelectorAll('.nav-item')) {
-    b.addEventListener('click', () => {
-      document.querySelector('.nav-item.active')?.classList.remove('active');
-      b.classList.add('active');
-      filter = b.dataset.filter;
-      render();
-    });
-  }
+  $('nav').addEventListener('click', (e) => {
+    const b = e.target.closest('.nav-item');
+    if (!b) return;
+    filter = b.dataset.filter;
+    selected.clear();
+    render();
+  });
+  $('btn-new-queue').addEventListener('click', (e) => { e.stopPropagation(); openQueue(); });
+  $('qb-start').addEventListener('click', () => { const q = currentQueue(); if (q) run(invoke('queue_start', { id: q.id }), 'Couldn\'t start the queue'); });
+  $('qb-stop').addEventListener('click', () => { const q = currentQueue(); if (q) run(invoke('queue_stop', { id: q.id }), 'Couldn\'t stop the queue'); });
+  $('qb-rename').addEventListener('click', () => { const q = currentQueue(); if (q) openQueue(q); });
+  $('qb-delete').addEventListener('click', () => { const q = currentQueue(); if (q) openDeleteQueue(q, viewDownloads().length); });
+  $('qb-max').addEventListener('change', (e) => {
+    const q = currentQueue();
+    if (q) run(invoke('queue_update', { id: q.id, name: null, maxActive: Number(e.target.value) }), 'Couldn\'t change the queue');
+  });
+  $('d-queue').addEventListener('change', async (e) => {
+    const ids = [...selected];
+    const queueId = e.target.value ? Number(e.target.value) : null;
+    await run(invoke('set_queue', { ids, queueId }), 'Couldn\'t move it');
+    toast(queueId ? `Moved to ${queues.find((q) => q.id === queueId)?.name}` : 'Taken out of the queue');
+  });
   $('search').addEventListener('input', (e) => { query = e.target.value.trim(); render(); });
   $('btn-add').addEventListener('click', () => openAdd());
   $('btn-resume').addEventListener('click', resumeSelected);
   $('btn-pause').addEventListener('click', pauseSelected);
   $('btn-delete').addEventListener('click', () => openRemove(selectedDownloads()));
+  $('btn-delete').disabled = false;
   $('btn-pause-all').addEventListener('click', () => run(invoke('pause_all'), 'Couldn\'t pause'));
   $('btn-resume-all').addEventListener('click', () => run(invoke('resume_all'), 'Couldn\'t continue'));
   $('btn-settings').addEventListener('click', () => openSettings());
@@ -359,7 +434,7 @@ function bind() {
     else if (ctrl && e.key.toLowerCase() === 'a') { e.preventDefault(); for (const r of $('rows').children) selected.add(Number(r.dataset.id)); render(); }
     else if (ctrl && e.key.toLowerCase() === 'p') { e.preventDefault(); pauseSelected(); }
     else if (ctrl && e.key.toLowerCase() === 'r') { e.preventDefault(); resumeSelected(); }
-    else if (e.key === 'Delete' && selected.size) openRemove(selectedDownloads());
+    else if (e.key === 'Delete') openRemove(selectedDownloads());
     else if (e.key === 'Escape') { selected.clear(); render(); }
   });
   // Paste a link anywhere to add it.
@@ -375,7 +450,9 @@ async function start() {
   info = { ...info, ...(await run(invoke('app_info'), 'Couldn\'t start')) };
   initDialogs();
   for (const d of (await run(invoke('list'), 'Couldn\'t load downloads')) ?? []) downloads.set(d.id, d);
+  queues = (await run(invoke('queues_list'), 'Couldn\'t load queues')) ?? [];
   await listen('engine', onEngine);
+  await listen('queues', (list) => { queues = list; render(); });
   render();
 }
 

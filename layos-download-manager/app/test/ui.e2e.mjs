@@ -115,12 +115,87 @@ try {
       await page.waitForFunction(() => document.querySelectorAll('#rows tr').length === 1);
       assert.match(await page.locator('#rows tr').textContent(), /Big Buck Bunny/);
       console.log('ok - the Torrents category shows only torrents');
+
+      // Queues: create one, add a download to it, start it, then delete it keeping the download.
+      await page.click('.nav-item[data-filter="all"]');
+      await page.click('#btn-new-queue');
+      await page.fill('#queue-name', 'Tonight');
+      await page.selectOption('#queue-max', '1');
+      await page.click('#queue-ok');
+      const qnav = page.locator('#queue-nav .nav-item', { hasText: 'Tonight' });
+      await qnav.click();
+      await page.locator('#queuebar:not([hidden])').waitFor();
+      await page.click('#btn-add');
+      assert.equal(await page.locator('#add-queue option:checked').textContent(), 'Tonight', 'adding from a queue picks that queue');
+      await page.fill('#add-url', 'https://mirror.example.org/archive.zip');
+      await page.click('#add-start');
+      const row = page.locator('#rows tr', { hasText: 'archive.zip' });
+      await row.locator('.badge', { hasText: 'Waiting' }).waitFor();
+      console.log('ok - a download added to a stopped queue waits');
+      await page.click('#qb-start');
+      await row.locator('.badge', { hasText: 'Downloading' }).waitFor();
+      await page.locator('#qb-state', { hasText: 'Running' }).waitFor();
+      // The bars above the list keep their own height; the list gets the rest.
+      const bannerH = await page.locator('#privacy-banner').evaluate((e) => e.getBoundingClientRect().height);
+      assert.ok(bannerH < 80, `privacy banner is ${bannerH}px tall`);
+      if (shots) await page.screenshot({ path: join(shots, 'app-queue.png') });
+      console.log('ok - Start queue starts its downloads');
+      await page.click('#qb-stop');
+      await row.locator('.badge', { hasText: 'Paused' }).waitFor();
+      console.log('ok - Stop queue pauses them');
+      await page.click('#qb-delete');
+      await page.click('#delqueue-ok');
+      await page.locator('#queue-nav .nav-item', { hasText: 'Tonight' }).waitFor({ state: 'detached' });
+      await page.locator('#rows tr', { hasText: 'archive.zip' }).waitFor();
+      console.log('ok - Delete queue (keeping downloads) removes the queue and keeps its download');
+
+      // Group remove: everything finished at once.
+      await page.click('.nav-item[data-filter="all"]');
+      await page.locator('#rows tr.completed').first().waitFor({ timeout: 60_000 });
+      const finishedBefore = await page.locator('#rows tr.completed').count();
+      await page.click('#btn-delete');
+      await page.check('input[name="scope"][value="finished"]');
+      if (shots) await page.screenshot({ path: join(shots, 'app-remove.png') });
+      await page.click('#remove-ok');
+      await page.waitForFunction(() => document.querySelectorAll('#rows tr.completed').length === 0);
+      console.log(`ok - "All finished" removes ${finishedBefore || 'the'} finished downloads in one go`);
+
+      // Start with Windows and minimize to tray are settings.
+      await page.click('#btn-settings');
+      assert.equal(await page.isChecked('input[name="launchOnStartup"]'), true);
+      await page.check('input[name="minimizeToTray"]');
+      await page.uncheck('input[name="launchOnStartup"]');
+      assert.equal(await page.isDisabled('input[name="startMinimized"]'), true);
+      await page.click('#settings-save');
+      const saved = await page.evaluate(() => import('./backend.js').then((b) => b.invoke('get_settings')));
+      assert.equal(saved.minimizeToTray, true);
+      assert.equal(saved.launchOnStartup, false);
+      console.log('ok - "Start with Windows" and "Minimize to the tray" are saved');
     } else {
       await page.locator('#rows tr', { hasText: 'keynote' }).click();
       await page.waitForTimeout(400);
       if (shots) await page.screenshot({ path: join(shots, 'app-main-dark.png') });
       console.log('ok - dark mode renders');
     }
+    // No pills: nothing may be capsule- or circle-shaped (corners of half the height or more).
+    for (const open of [null, '#btn-settings', '#btn-add']) {
+      if (open) await page.click(open);
+      const pills = await page.evaluate(() => {
+        const out = [];
+        for (const el of document.querySelectorAll('body *')) {
+          const r = el.getBoundingClientRect();
+          if (r.width < 4 || r.height < 4) continue;
+          const cs = getComputedStyle(el);
+          if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+          const radius = Math.max(...['TopLeft', 'TopRight', 'BottomLeft', 'BottomRight'].map((c) => parseFloat(cs[`border${c}Radius`]) || 0));
+          if (radius > 0 && radius >= Math.min(r.width, r.height) / 2 - 0.5) out.push(`${el.tagName.toLowerCase()}.${el.className} (${Math.round(r.width)}x${Math.round(r.height)}, radius ${radius})`);
+        }
+        return out;
+      });
+      assert.deepEqual(pills, [], `pill-shaped elements: ${pills.join(', ')}`);
+      if (open) await page.keyboard.press('Escape');
+    }
+    console.log(`ok - no pill shapes anywhere (${scheme})`);
     assert.deepEqual(errors, [], 'no errors in the page');
     await page.close();
   }
