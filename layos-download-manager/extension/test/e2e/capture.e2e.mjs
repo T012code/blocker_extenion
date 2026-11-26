@@ -91,6 +91,12 @@ const HLS_PAGE = `<!doctype html><title>Live show</title><body style="margin:0;b
 const MAGNET_PAGE = `<!doctype html><title>Torrents</title>
 <a id="m" href="magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&dn=Open+Movie+1080p">Open Movie 1080p</a>`;
 
+// A signed link that expires: only the current token works (as on many download sites).
+const SIGNED = bytes(8 * 1024 * 1024, 6);
+let signedToken = 'a1';
+let signedPacing = true;
+const releasePage = () => `<!doctype html><title>Release</title><a id="signed" href="/signed/report.iso?token=${signedToken}">report.iso</a>`;
+
 // Responses for these trickle out so there's time to pause them.
 const PACED = new Set(['/files/paced.iso']);
 let rangeRequests = 0;
@@ -137,6 +143,32 @@ const site = createServer(async (req, res) => {
       res.end(body.subarray(a, b + 1));
     } else {
       res.end(body);
+    }
+    return;
+  }
+  if (req.url === '/release.html') {
+    res.setHeader('content-type', 'text/html');
+    res.end(releasePage());
+    return;
+  }
+  if (req.url.startsWith('/signed/report.iso')) {
+    if (new URL(req.url, base).searchParams.get('token') !== signedToken) { res.statusCode = 403; res.end('link expired'); return; }
+    res.setHeader('accept-ranges', 'bytes');
+    res.setHeader('content-type', 'application/octet-stream');
+    res.setHeader('content-disposition', 'attachment; filename="report.iso"');
+    const m = /bytes=(\d+)-(\d*)/.exec(req.headers.range ?? '');
+    const a = m ? Number(m[1]) : 0;
+    const b = m && m[2] ? Math.min(Number(m[2]), SIGNED.length - 1) : SIGNED.length - 1;
+    if (m) { res.statusCode = 206; res.setHeader('content-range', `bytes ${a}-${b}/${SIGNED.length}`); }
+    res.setHeader('content-length', b - a + 1);
+    const part = SIGNED.subarray(a, b + 1);
+    // The browser's own request always trickles (so the backup hook sees it running);
+    // the app's range requests only while pacing is on.
+    if ((signedPacing || !m) && part.length > 1) {
+      for (let i = 0; i < part.length && !res.destroyed; i += 64 * 1024) { res.write(part.subarray(i, i + 64 * 1024)); await sleep(250); }
+      res.end();
+    } else {
+      res.end(part);
     }
     return;
   }
@@ -292,6 +324,39 @@ try {
   assert.ok(rangeRequests > before, 'continuing asks only for the missing parts');
   await popup.locator('.dl.completed', { hasText: 'paced.iso' }).waitFor({ timeout: 5_000 });
   console.log('ok - Continue finishes the download from where it stopped, byte-for-byte correct');
+
+  // ---- Part 3b: the link expires; "Refresh link" opens its page; downloading it there
+  // again continues the same download from where it stopped.
+  const rel = await managed.newPage();
+  await rel.goto(`${base}/release.html`);
+  await rel.click('#signed');
+  await popup.bringToFront();
+  const sItem = popup.locator('.dl', { hasText: 'report.iso' });
+  await sItem.getByRole('button', { name: 'Pause' }).waitFor({ timeout: 20_000 });
+  await sleep(1500);
+  await sItem.getByRole('button', { name: 'Pause' }).click();
+  await sItem.getByRole('button', { name: 'Continue' }).waitFor({ timeout: 10_000 });
+  signedToken = 'b2'; // the old link stops working
+  await sItem.getByRole('button', { name: 'Continue' }).click();
+  await sItem.getByRole('button', { name: 'Refresh link' }).waitFor({ timeout: 15_000 });
+  assert.match(await sItem.locator('.meta').textContent(), /^Link expired · [\d.]+ (KB|MB) of 8 MB/);
+  if (shots) await popup.screenshot({ path: join(shots, 'popup-link-expired.png') });
+  const opened = managed.waitForEvent('page');
+  await sItem.getByRole('button', { name: 'Refresh link' }).click();
+  const tab = await opened;
+  await tab.waitForLoadState();
+  assert.equal(tab.url(), `${base}/release.html`, 'opens the page the file came from');
+  signedPacing = false;
+  await tab.click('#signed'); // the page now has a fresh link
+  await popup.bringToFront();
+  const okSigned = await waitFor(saved('Compressed/report.iso'), SIGNED);
+  assert.ok(okSigned, 'the refreshed download should finish, byte-for-byte');
+  await popup.locator('.dl.completed', { hasText: 'report.iso' }).waitFor({ timeout: 10_000 });
+  assert.equal(await popup.locator('.dl', { hasText: 'report.iso' }).count(), 1, 'it continued the same download, not a second one');
+  assert.ok(!existsSync(saved('Compressed/report (1).iso')), 'no second copy');
+  console.log('ok - an expired link is refreshed from its page and the download continues where it stopped');
+  await tab.close();
+  await rel.close();
 
   // ---- Part 4: the Download button on videos, and magnet links.
   if (haveMedia) {

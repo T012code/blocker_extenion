@@ -132,6 +132,7 @@ body.resizing-x, body.resizing-x * { cursor: col-resize !important; user-select:
   font-weight: 560; white-space: nowrap;
   transition: background-color var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out), transform var(--dur-micro) var(--ease-out);
 }
+.btn[hidden] { display: none; }
 .btn:hover:not(:disabled) { background: var(--surface); }
 .btn:active:not(:disabled) { transform: scale(0.97); }
 /* Disabled: still a button (faint outline), still readable (4.5:1 text). */
@@ -327,7 +328,7 @@ dialog:has(.dialog.wide) { width: min(720px, calc(100vw - 32px)); }
 @keyframes dialog-in { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: none; } }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 .dialog { display: grid; gap: var(--space-4); padding: var(--space-6); }
-.dialog.narrow { max-width: 440px; }
+dialog:has(.dialog.narrow) { width: min(460px, calc(100vw - 32px)); }
 .dialog h2 { font-size: var(--text-xl); }
 .dialog .lead { color: var(--ink-muted); margin-top: calc(var(--space-2) * -1); }
 .field { display: grid; gap: var(--space-2); }
@@ -338,6 +339,59 @@ dialog:has(.dialog.wide) { width: min(720px, calc(100vw - 32px)); }
 }
 .field input:focus-visible, .row input:focus-visible, .field select:focus-visible, .row select:focus-visible { box-shadow: none; }
 .row { display: flex; gap: var(--space-2); }
+.row > .btn { height: 36px; flex: none; }
+.narrow-field { max-width: 240px; }
+
+/* Folder picker: one control with the folder, the path and a Choose button inside. */
+.pathfield {
+  display: flex; align-items: center; height: 40px; min-width: 0;
+  border: 1px solid var(--rule-strong); border-radius: var(--radius-sm); background: var(--paper);
+  transition: border-color var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out);
+}
+.pathfield:hover { border-color: color-mix(in oklab, var(--ink) 35%, transparent); }
+.pathfield:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 22%, transparent); }
+.pathfield .pathfield-icon { margin: 0 var(--space-2) 0 var(--space-3); color: var(--accent); }
+.pathfield input[type=text] {
+  flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; padding: 0;
+  font-family: var(--font); text-overflow: ellipsis;
+}
+.pathfield input[type=text]:focus-visible { box-shadow: none; outline: 0; }
+.pathfield input::placeholder { color: var(--ink-muted); }
+.pathfield-clear {
+  display: grid; place-items: center; width: 28px; height: 28px; margin-right: var(--space-1); flex: none;
+  border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--ink-muted); cursor: pointer;
+  transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out);
+}
+.pathfield-clear[hidden] { display: none; }
+.pathfield-clear:hover { background: var(--surface); color: var(--ink); }
+.pathfield-btn {
+  display: inline-flex; align-items: center; gap: var(--space-2); align-self: stretch; flex: none;
+  padding: 0 var(--space-3) 0 var(--space-3); border: 0; border-left: 1px solid var(--rule);
+  border-radius: 0 calc(var(--radius-sm) - 1px) calc(var(--radius-sm) - 1px) 0;
+  background: var(--surface); color: var(--ink); font-weight: 560; cursor: pointer; white-space: nowrap;
+  transition: background-color var(--dur-micro) var(--ease-out);
+}
+.pathfield-btn:hover { background: var(--surface-strong); }
+.pathfield-btn:active .icon { transform: scale(0.9); }
+.pathfield-btn .icon { color: var(--accent); transition: transform var(--dur-micro) var(--ease-out); }
+.pathfield-btn:focus-visible { outline-offset: -2px; box-shadow: none; }
+
+/* Dialog heading with a mark (refresh). */
+.dialog-head { display: flex; gap: var(--space-3); align-items: center; min-width: 0; }
+.dialog-head > div { min-width: 0; }
+.dialog-head p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dialog-mark { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border-radius: var(--radius-md); }
+.dialog-mark.held { background: color-mix(in oklab, var(--warning) 16%, var(--card)); color: var(--warning); }
+.refresh-step { display: flex; gap: var(--space-3); align-items: flex-start; padding: var(--space-3); border-radius: var(--radius-sm); background: var(--surface); animation: fade-in var(--dur-base) var(--ease-out); }
+.refresh-step[hidden] { display: none; }
+.refresh-step > div { display: grid; gap: var(--space-1); justify-items: start; }
+.refresh-step .spinner { margin-top: 2px; }
+.spinner { width: 14px; height: 14px; flex: none; border-radius: 2px; border: 2px solid var(--accent); border-right-color: transparent; animation: spin 900ms linear infinite; }
+.refresh-paste summary { display: inline-flex; align-items: center; gap: var(--space-2); cursor: pointer; color: var(--accent-strong); font-weight: 560; list-style: none; padding: var(--space-1) 0; }
+.refresh-paste summary::-webkit-details-marker { display: none; }
+.refresh-paste summary:hover { text-decoration: underline; text-underline-offset: 2px; }
+.refresh-paste[open] summary { margin-bottom: var(--space-2); }
+.refresh-paste .row { animation: fade-in var(--dur-base) var(--ease-out); }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
 .check { display: flex; align-items: flex-start; gap: var(--space-3); min-height: 24px; }
 .check input { width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--accent); flex: none; }

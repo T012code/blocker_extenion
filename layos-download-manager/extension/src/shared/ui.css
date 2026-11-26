@@ -62,17 +62,12 @@ textarea { resize: vertical; min-height: 72px; padding: var(--space-2) var(--spa
 .switch input:checked + span::before { transform: translateX(18px); background: var(--accent-ink); }
 .switch input:focus-visible + span { outline: 2px solid var(--focus); outline-offset: 2px; }
 
-/* Status: a word with a shape, never colour alone, never a boxed tag. */
-.badge { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); font-weight: 600; white-space: nowrap; color: var(--ink-muted); }
-.badge::before { content: ""; width: 8px; height: 8px; flex: none; background: currentColor; border-radius: 1px; }
+/* Status words: colour and text, no marker. */
+.badge { display: inline-flex; align-items: center; font-size: var(--text-sm); font-weight: 600; white-space: nowrap; color: var(--ink-muted); }
 .badge.ok { color: var(--success); }
 .badge.info { color: var(--accent); }
-.badge.info::before { clip-path: polygon(0 0, 100% 50%, 0 100%); }
 .badge.warn { color: var(--warning); }
-.badge.warn::before { clip-path: polygon(50% 0, 100% 100%, 0 100%); }
 .badge.bad { color: var(--danger); }
-.badge.bad::before { transform: rotate(45deg); }
-.badge.plain::before { background: transparent; box-shadow: inset 0 0 0 1.5px currentColor; }
 
 /* A download's state: icon and word. Colour only where it means something. */
 .icon { flex: none; stroke-width: 1.75; display: block; }

@@ -128,7 +128,8 @@ try {
       await page.click('#btn-add');
       assert.equal(await page.locator('#add-queue option:checked').textContent(), 'Tonight', 'adding from a queue picks that queue');
       await page.fill('#add-url', 'https://mirror.example.org/archive.zip');
-      await page.click('#add-start');
+      assert.equal(await page.isHidden('#add-start'), true, 'in a queue, only "Add to queue" is offered');
+      await page.locator('#add-later.primary', { hasText: 'Add to queue' }).click();
       const row = page.locator('#rows tr', { hasText: 'archive.zip' });
       await row.locator('.status', { hasText: 'Waiting' }).waitFor();
       console.log('ok - a download added to a stopped queue waits');
@@ -392,6 +393,58 @@ async function layoutAndWindowTests() {
   assert.equal(saved.showMiniWindow, false);
   assert.equal(saved.showProgressWindow, true);
   console.log('ok - download windows, the "done" window and the mini window can each be turned off');
+
+  // The folder field: automatic by default, Choose… picks a folder, × goes back.
+  await page.click('#btn-add');
+  await page.locator('#dlg-add[open]').waitFor();
+  await page.waitForFunction(() => document.getElementById('add-dir').placeholder.startsWith('Automatic'));
+  assert.equal(await page.isHidden('#add-dir-clear'), true);
+  const fit = await page.evaluate(() => {
+    const box = document.querySelector('#add-dir').closest('.pathfield').getBoundingClientRect();
+    const b = document.getElementById('add-browse').getBoundingClientRect();
+    return { inside: b.top >= box.top && b.bottom <= box.bottom && b.right <= box.right + 0.5, full: b.height >= box.height - 2.5 };
+  });
+  assert.deepEqual(fit, { inside: true, full: true }, 'Choose sits inside the folder field, full height');
+  await page.click('#add-browse');
+  await page.waitForFunction(() => document.getElementById('add-dir').value === 'D:\\Media');
+  await page.locator('#add-dir-clear:not([hidden])').click();
+  assert.equal(await page.inputValue('#add-dir'), '');
+  if (shots) await page.screenshot({ path: join(shots, 'app-add-folder.png') });
+  await page.keyboard.press('Escape');
+  console.log('ok - the folder field picks a folder with Choose…, and × goes back to automatic');
+
+  // Refresh an expired link: Continue on it tries the link, opens its page and waits.
+  await page.locator('#rows tr', { hasText: 'setup.exe' }).click();
+  await page.locator('#d-refresh:not([hidden])').waitFor();
+  assert.equal(await page.isHidden('#d-open'), true);
+  await page.click('#btn-resume');
+  await page.locator('#dlg-refresh[open]').waitFor();
+  await page.locator('#refresh-waiting:not([hidden])', { hasText: 'dl.example.com' }).waitFor();
+  await page.locator('#refresh-pct', { hasText: '43%' }).waitFor();
+  await page.waitForFunction(() => window.__ldmCalls.some((c) => c.cmd === 'refresh_link' && c.args.open === true));
+  if (shots) await page.screenshot({ path: join(shots, 'app-refresh-link.png') });
+  const expiredId = Number(await page.locator('#rows tr', { hasText: 'setup.exe' }).getAttribute('data-id'));
+  await page.evaluate((id) => window.__ldmFreshLink(id), expiredId);
+  await page.locator('#dlg-refresh[open]').waitFor({ state: 'detached' });
+  await page.locator('#toast', { hasText: 'Got a fresh link. Continuing setup.exe' }).waitFor();
+  await page.locator('#rows tr', { hasText: 'setup.exe' }).locator('.status', { hasText: 'Downloading' }).waitFor();
+  console.log('ok - "Refresh link" opens the download\'s page, and a fresh link from the browser continues it');
+
+  // Or paste a new link.
+  await page.evaluate(() => import('./backend.js').then((b) => b.invoke('pause', { ids: [] })));
+  await page.goto(url);
+  await page.locator('#rows tr', { hasText: 'setup.exe' }).click({ button: 'right' });
+  await page.locator('#menu-row button', { hasText: 'Refresh link…' }).click();
+  await page.locator('#refresh-waiting:not([hidden])').waitFor();
+  await page.click('#refresh-paste summary');
+  await page.fill('#refresh-url', 'not a link');
+  await page.click('#refresh-use');
+  await page.locator('#refresh-error:not([hidden])').waitFor();
+  await page.fill('#refresh-url', 'https://mirror.example.com/setup.exe?token=new');
+  await page.keyboard.press('Enter');
+  await page.locator('#dlg-refresh[open]').waitFor({ state: 'detached' });
+  await page.locator('#rows tr', { hasText: 'setup.exe' }).locator('.status', { hasText: 'Downloading' }).waitFor();
+  console.log('ok - a pasted link continues an expired download (and a non-link is refused)');
   assert.deepEqual(errors, [], 'no errors in the page');
   await page.close();
 
@@ -440,6 +493,12 @@ async function layoutAndWindowTests() {
   await pw.locator('#status', { hasText: 'Paused' }).waitFor();
   await pw.locator('#pause', { hasText: 'Continue' }).waitFor();
   await pw.click('#toggle');
+  // An expired download's window offers Refresh link, handled by the main window.
+  await pw.goto(`${base}progress.html?mock&id=5`);
+  await pw.locator('#pause', { hasText: 'Refresh link' }).click();
+  await pw.waitForFunction(() => window.__ldmCalls.some((c) => c.cmd === 'request_refresh' && c.args.id === 5));
+  await pw.goto(`${base}progress.html?mock&id=1`);
+  await pw.locator('#name', { hasText: 'ubuntu' }).waitFor();
   console.log(`ok - a download's window shows live progress, shrinks to one line (${Math.round(fullH)} -> ${Math.round(smallH)}px) and pauses`);
   await pw.goto(`${base}progress.html?mock&id=4`);
   await pw.locator('#done:not([hidden])', { hasText: 'Download complete' }).waitFor();

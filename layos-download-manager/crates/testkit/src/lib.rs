@@ -21,6 +21,8 @@ pub struct ServerOptions {
     pub drops: usize,
     pub content_disposition: Option<String>,
     pub content_type: Option<String>,
+    /// Every request gets 403 Forbidden, as when a signed link has expired.
+    pub refuse: bool,
 }
 
 impl Default for ServerOptions {
@@ -34,6 +36,7 @@ impl Default for ServerOptions {
             drops: 0,
             content_disposition: None,
             content_type: Some("application/octet-stream".into()),
+            refuse: false,
         }
     }
 }
@@ -154,6 +157,9 @@ async fn handle(mut sock: TcpStream, state: Arc<State>) -> std::io::Result<()> {
     }
 
     let opts = state.options.lock().unwrap().clone();
+    if opts.refuse {
+        return respond_status(&mut sock, "403 Forbidden").await;
+    }
     let body = state.body.lock().unwrap().clone();
     let total = body.len() as u64;
 

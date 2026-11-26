@@ -3,7 +3,7 @@
 
 import { invoke, listen } from './backend.js';
 import { action, bytes, eta, percent, speed } from './format.js';
-import { initDialogs, openAdd, openDeleteQueue, openGrab, openQueue, openRemove, openSchedule, openSettings } from './dialogs.js';
+import { initDialogs, openAdd, openRefresh, openDeleteQueue, openGrab, openQueue, openRemove, openSchedule, openSettings } from './dialogs.js';
 import { hydrateIcons, icon } from './icons.js';
 import { initLayout } from './layout.js';
 import { renderMap } from './sectionmap.js';
@@ -46,6 +46,8 @@ export async function run(promise, failText) {
 
 const kindOf = (d) => d.kind?.type ?? 'http';
 const isTorrent = (d) => kindOf(d) === 'torrent';
+/** A file download whose link stopped working can get a fresh one. */
+const canRefresh = (d) => kindOf(d) === 'http' && (d.status === 'needsRefresh' || d.status === 'failed');
 const isActive = (s) => ['connecting', 'downloading', 'seeding', 'blocked'].includes(s);
 
 function matches(d) {
@@ -245,6 +247,8 @@ function renderDetails() {
   $('d-error-wrap').hidden = !d.error || d.status === 'completed';
   $('d-error').textContent = d.error ?? '';
   $('d-open').disabled = d.status !== 'completed' && d.status !== 'seeding';
+  $('d-refresh').hidden = !canRefresh(d);
+  $('d-open').hidden = canRefresh(d);
   if (document.activeElement !== $('d-queue')) {
     $('d-queue').replaceChildren(
       Object.assign(document.createElement('option'), { value: '', textContent: 'No queue' }),
@@ -279,6 +283,9 @@ function onEngine(ev) {
 // ---------- user actions
 
 async function resumeSelected() {
+  // One expired download: continuing it means getting a fresh link.
+  const sel = selectedDownloads();
+  if (sel.length === 1 && sel[0].status === 'needsRefresh' && canRefresh(sel[0])) return openRefresh(sel[0]);
   const ids = selectedDownloads().filter((d) => action(d.status) === 'continue').map((d) => d.id);
   if (ids.length) await run(invoke('resume', { ids }), 'Couldn\'t continue');
 }
@@ -314,6 +321,7 @@ function onRowDoubleClick(e) {
   const d = downloads.get(Number(tr.dataset.id));
   if (!d) return;
   if (d.status === 'completed') run(invoke('open_download', { id: d.id }), 'Couldn\'t open it');
+  else if (d.status === 'needsRefresh' && canRefresh(d)) openRefresh(d);
   else if (action(d.status) === 'continue') run(invoke('resume', { ids: [d.id] }), 'Couldn\'t continue');
   else if (action(d.status) === 'pause') run(invoke('pause', { ids: [d.id] }), 'Couldn\'t pause');
 }
@@ -360,6 +368,7 @@ function openRowMenu(x, y) {
     items.push(menuItem('Open', () => run(invoke('open_download', { id: one.id }), 'Couldn\'t open it'), { disabled: one.status !== 'completed' && one.status !== 'seeding', kbd: 'Enter', ico: 'external' }));
     items.push(menuItem('Show in folder', () => run(invoke('show_in_folder', { id: one.id }), 'Couldn\'t show the folder'), { ico: 'folder' }));
     items.push(menuItem('Show download window', () => showWindow(one), { ico: 'maximize' }));
+    if (canRefresh(one)) items.push(menuItem('Refresh link…', () => openRefresh(one), { ico: 'refresh' }));
     items.push(document.createElement('hr'));
   }
   items.push(menuItem('Continue', resumeSelected, { disabled: !canGo, kbd: 'Ctrl+R', ico: 'play' }));
@@ -489,6 +498,8 @@ function bindExtras() {
   });
   $('table').querySelector('thead').addEventListener('contextmenu', (e) => { e.preventDefault(); openColumnsMenu(e.clientX, e.clientY); });
   $('btn-mini').addEventListener('click', () => run(invoke('show_mini'), 'Couldn\'t open the mini window'));
+  $('d-refresh').addEventListener('click', () => { const [d] = selectedDownloads(); if (d) openRefresh(d); });
+  listen('refresh-request', (id) => { const d = downloads.get(id); if (d) openRefresh(d); });
   $('d-window').addEventListener('click', () => { const [d] = selectedDownloads(); if (d) showWindow(d); });
   addEventListener('blur', closeMenus);
   addEventListener('keydown', (e) => {

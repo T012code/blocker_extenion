@@ -64,6 +64,16 @@ Any download can be paused and continued. Most servers allow fetching part of a 
 
 Until the desktop app is ready, the browser extension's toolbar pop-up lists your downloads with live progress, speed and time left, and has **Pause** and **Continue** buttons.
 
+
+### When a link expires
+
+Many sites give out download links that only work for a while. When the server refuses a link part-way (401, 403, 404 or 410), the download is marked **Link expired** and keeps everything it has. **Refresh link** (in the details, the right-click menu, the download's window, the extension pop-up, or simply Continue) then:
+
+1. tries the same link again, since some servers refuse only for a while; if it works, the download just carries on;
+2. otherwise opens the page the file came from (or the link itself) in your browser, and waits up to 15 minutes. Download the file there again: the extension sends it to the app, which recognises it by name or size and gives the **fresh link to the old download**, continuing from where it stopped instead of starting a second one. Any expired download is also matched automatically when the same file (same name and size) comes in from the browser;
+3. or you paste a new link yourself.
+
+If the file behind the new link turns out to be a different size, the download starts over rather than mixing two files.
 ## The app
 
 The main window lists your downloads with their progress, speed and time left. Categories on the left (Video, Music, Documents, Compressed, Programs, Torrents) and a search box narrow the list. Select a download to see its **live section map**: one strip per section, filled as it downloads, with a lime marker where each connection is working. You can change its **number of sections while it runs**.

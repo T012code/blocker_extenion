@@ -135,3 +135,28 @@ The second round: Lucide icons throughout, motion on interaction, a Type column 
 | Download complete | ![](icons-and-windows/after/window-done-light.png) ![](icons-and-windows/after/window-done-dark.png) |
 | Mini window | ![](icons-and-windows/after/window-mini-light.png) ![](icons-and-windows/after/window-mini-dark.png) |
 | Mini window, expanded | ![](icons-and-windows/after/window-mini-open-light.png) ![](icons-and-windows/after/window-mini-open-dark.png) |
+
+## Folder picker, refreshing expired links, pop-up
+
+The folder field is one control (folder, path, ×, Choose…) on its own row; expired links can be refreshed (the same link is tried, then the page opens and the next download of the file continues this one); the pop-up drops the status marker and keeps "Developed by Layó" at the bottom. Screens in [refresh-and-folders/after](refresh-and-folders/after).
+
+![Add a download: before and after](refresh-and-folders/compare/app-add.png)
+
+![Add a video: before and after](refresh-and-folders/compare/app-add-video.png)
+
+![Settings, Downloads: before and after](refresh-and-folders/compare/app-settings-connection.png)
+
+![Main window: before and after](refresh-and-folders/compare/app-main-light.png)
+
+![Extension pop-up (light): before and after](refresh-and-folders/compare/ext-popup-light.png)
+
+![Extension pop-up (dark): before and after](refresh-and-folders/compare/ext-popup-dark.png)
+
+![Extension settings: before and after](refresh-and-folders/compare/ext-options-light.png)
+
+### New
+
+| | |
+| --- | --- |
+| A folder chosen (× goes back to automatic) | ![](refresh-and-folders/after/app-add-folder-chosen.png) |
+| Refresh the link of an expired download | ![](refresh-and-folders/after/app-refresh-link.png) |

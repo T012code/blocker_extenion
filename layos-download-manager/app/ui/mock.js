@@ -129,7 +129,8 @@ const seed = () => {
   void t;
   const f = make({ url: 'https://files.example.net/report-q3.pdf', size: 3.2 * 1024 * 1024 });
   update(f, { status: 'completed', downloaded: f.size });
-  const e = make({ url: 'https://dl.example.com/old/setup.exe', size: 92 * 1024 * 1024 });
+  const e = make({ url: 'https://dl.example.com/old/setup.exe?token=a1', size: 92 * 1024 * 1024 });
+  e.request.referer = 'https://dl.example.com/downloads/';
   update(e, { status: 'needsRefresh', downloaded: 40 * 1024 * 1024, error: 'the server refused the link (HTTP 403); it may have expired' });
 };
 seed();
@@ -243,6 +244,24 @@ export async function invoke(cmd, args) {
     case 'privacy_status': return protectedNow() ? null : 'Waiting for a VPN or proxy. Set one up in Settings → Privacy, or allow torrents without one.';
     case 'test_proxy': if (/1080/.test(args.url)) return null; throw new Error('no answer');
     case 'open_download': case 'show_in_folder': case 'open_portfolio': return null;
+    case 'refresh_link': {
+      const d = downloads.get(args.id);
+      window.__ldmCalls.push({ cmd, args: structuredClone(args) });
+      // The same link still fails; the page opens in the browser.
+      return { resumed: false, pageUrl: d.request.referer ?? d.request.url };
+    }
+    case 'refresh_address': {
+      const d = downloads.get(args.id);
+      update(d, { request: { ...d.request, url: args.url }, status: 'downloading', error: null });
+      return null;
+    }
+    case 'open_page': case 'cancel_refresh':
+      window.__ldmCalls.push({ cmd, args: structuredClone(args) });
+      return null;
+    case 'request_refresh':
+      window.__ldmCalls.push({ cmd, args: structuredClone(args) });
+      emit('refresh-request', args.id);
+      return null;
     case 'get': { const d = downloads.get(args.id); if (!d) throw new Error('no such download'); return { ...d, live: undefined }; }
     case 'open_download_window': case 'show_mini': case 'mini_dismiss': case 'window_hide': case 'window_close':
     case 'window_size': case 'window_title': case 'show_app':
@@ -261,6 +280,13 @@ export function listen(event, handler) {
 export async function pick({ directory }) {
   return directory ? 'D:\\Media' : 'C:\\Users\\Layo\\Downloads\\linux.torrent';
 }
+
+/** For tests: the browser sent the fresh link an expired download was waiting for. */
+window.__ldmFreshLink = (id) => {
+  const d = downloads.get(id);
+  update(d, { request: { ...d.request, url: d.request.url.replace(/token=[^&]*/, 'token=fresh') }, status: 'downloading', error: null });
+  emit('link-refreshed', { id, fileName: d.fileName });
+};
 
 /** For tests: pretend the browser sent downloads. */
 window.__ldmBrowserDownload = (items, source = 'capture') => emit('browser-download', { items, source });

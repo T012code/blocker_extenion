@@ -61,6 +61,13 @@ impl Frontend for WindowFrontend {
     fn show(&self) {
         show_window(&self.app);
     }
+
+    fn refreshed(&self, d: &ldm_engine::Download) {
+        let _ = self.app.emit(
+            "link-refreshed",
+            serde_json::json!({ "id": d.id, "fileName": d.file_name }),
+        );
+    }
 }
 
 pub fn show_window(app: &AppHandle) {

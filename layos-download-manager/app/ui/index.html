@@ -117,6 +117,7 @@
             <span id="d-status"></span>
           </div>
           <div class="details-actions">
+            <button class="btn small primary" id="d-refresh" hidden><i data-icon="refresh"></i>Refresh link</button>
             <button class="btn small" id="d-open"><i data-icon="external"></i>Open</button>
             <button class="btn small" id="d-folder"><i data-icon="folder"></i>Show in folder</button>
             <button class="btn small icon" id="d-window" title="Show download window" aria-label="Show download window"><i data-icon="maximize"></i></button>
@@ -171,17 +172,17 @@
       </label>
       <div class="probe-info" id="add-info" hidden></div>
       <div class="formats" id="add-formats" hidden role="radiogroup" aria-label="Format"></div>
-      <div class="grid2">
-        <label class="field"><span>Save as</span><input id="add-name" type="text" placeholder="Name from the server"></label>
-        <label class="field"><span>Sections</span><select id="add-sections"></select></label>
-      </div>
-      <div class="grid2">
-        <label class="field"><span>Folder</span>
-          <div class="row">
-            <input id="add-dir" type="text" placeholder="By category">
-            <button class="btn" type="button" id="add-browse">Browse…</button>
+      <label class="field"><span>Save as</span><input id="add-name" type="text" placeholder="Name from the server"></label>
+      <label class="field"><span>Save in</span>
+          <div class="pathfield">
+            <i data-icon="folder" class="pathfield-icon"></i>
+            <input id="add-dir" type="text" placeholder="Automatic: a folder for each type of file" spellcheck="false" autocomplete="off">
+            <button class="pathfield-clear" type="button" id="add-dir-clear" title="Back to automatic" aria-label="Back to automatic" hidden><i data-icon="x"></i></button>
+            <button class="pathfield-btn" type="button" id="add-browse"><i data-icon="folder-open"></i>Choose…</button>
           </div>
-        </label>
+      </label>
+      <div class="grid2">
+        <label class="field"><span>Sections</span><select id="add-sections"></select></label>
         <label class="field"><span>Queue</span><select id="add-queue"></select></label>
       </div>
       <p class="error" id="add-error" role="alert" hidden></p>
@@ -200,10 +201,15 @@
       <h2 id="browser-title">Download from your browser</h2>
       <div class="checklist-head"><span id="browser-count" class="muted"></span><button type="button" class="btn small subtle" id="browser-toggle">Select none</button></div>
       <ul class="checklist" id="browser-items"></ul>
-      <div class="grid2">
-        <label class="field"><span>Sections</span><select id="browser-sections"></select></label>
-        <label class="field"><span>Folder</span><input id="browser-dir" type="text" placeholder="By category"></label>
-      </div>
+      <label class="field"><span>Save in</span>
+          <div class="pathfield">
+            <i data-icon="folder" class="pathfield-icon"></i>
+            <input id="browser-dir" type="text" placeholder="Automatic: a folder for each type of file" spellcheck="false" autocomplete="off">
+            <button class="pathfield-clear" type="button" id="browser-dir-clear" title="Back to automatic" aria-label="Back to automatic" hidden><i data-icon="x"></i></button>
+            <button class="pathfield-btn" type="button" id="browser-browse"><i data-icon="folder-open"></i>Choose…</button>
+          </div>
+      </label>
+      <label class="field narrow-field"><span>Sections</span><select id="browser-sections"></select></label>
       <div class="actions">
         <span class="spacer"></span>
         <button class="btn" type="button" id="browser-cancel">Cancel</button>
@@ -242,6 +248,46 @@
   </dialog>
 
   <!-- Remove -->
+  <!-- Refresh an expired link -->
+  <dialog id="dlg-refresh" aria-labelledby="refresh-title">
+    <form method="dialog" class="dialog narrow" id="refresh-form">
+      <div class="dialog-head">
+        <span class="dialog-mark held"><i data-icon="expired" data-size="20"></i></span>
+        <div>
+          <h2 id="refresh-title">Refresh the link</h2>
+          <p class="muted" id="refresh-name"></p>
+        </div>
+      </div>
+      <p id="refresh-lead">The server stopped accepting this download's link. With a fresh one it carries on from where it stopped.</p>
+
+      <div class="refresh-step" id="refresh-checking" role="status">
+        <span class="spinner" aria-hidden="true"></span>
+        <span>Trying the same link again…</span>
+      </div>
+      <div class="refresh-step waiting" id="refresh-waiting" role="status" hidden>
+        <span class="spinner" aria-hidden="true"></span>
+        <div>
+          <strong>Waiting for the browser</strong>
+          <p class="muted small">We opened <span id="refresh-page"></span> in your browser. Download the file there again: it's picked up here and continues from <span id="refresh-pct"></span>, instead of starting over.</p>
+          <button class="link" type="button" id="refresh-reopen">Open the page again</button>
+        </div>
+      </div>
+
+      <details class="refresh-paste" id="refresh-paste">
+        <summary><i data-icon="link"></i>Or paste a new link</summary>
+        <div class="row">
+          <input id="refresh-url" type="text" placeholder="https://…" spellcheck="false" autocomplete="off" aria-label="New link">
+          <button class="btn" type="button" id="refresh-use">Use this link</button>
+        </div>
+      </details>
+      <p class="error" id="refresh-error" role="alert" hidden></p>
+      <div class="actions">
+        <span class="spacer"></span>
+        <button class="btn" type="button" id="refresh-cancel">Close</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="dlg-remove" aria-labelledby="remove-title">
     <form method="dialog" class="dialog narrow">
       <h2 id="remove-title">Remove from list</h2>
@@ -353,7 +399,11 @@
 
         <section class="tabpanel" data-panel="connection" role="tabpanel" hidden>
           <label class="field"><span>Download folder</span>
-            <div class="row"><input name="downloadDir" type="text"><button class="btn" type="button" id="set-browse">Browse…</button></div>
+<div class="pathfield">
+            <i data-icon="folder" class="pathfield-icon"></i>
+            <input id="set-dir" name="downloadDir" type="text" placeholder="" spellcheck="false" autocomplete="off">
+            <button class="pathfield-btn" type="button" id="set-browse"><i data-icon="folder-open"></i>Choose…</button>
+          </div>
           </label>
           <label class="check"><input type="checkbox" name="categoryFolders"><span>Sort into Video, Music, Documents and other folders</span></label>
           <label class="field"><span>Sections for new downloads</span>

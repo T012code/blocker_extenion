@@ -23,6 +23,79 @@ function showError(el, text) {
 const isMagnet = (u) => /^magnet:\?/i.test(u);
 const looksLikeFile = (u) => /\.[a-z0-9]{2,5}(?:[?#]|$)/i.test(new URL(u, 'https://x').pathname);
 
+// ---------------------------------------------------------------- folder fields
+
+/** The × in a folder field shows only when a folder was chosen (empty = automatic). */
+function syncPathfields() {
+  for (const id of ['add-dir', 'browser-dir']) $(`${id}-clear`).hidden = !$(id).value.trim();
+}
+
+/** Says where "automatic" saves; the full folder is in the tooltip. */
+function autoPlaceholder(s) {
+  if (!s?.downloadDir) return;
+  const sep = s.downloadDir.includes('\\') ? '\\' : '/';
+  const last = s.downloadDir.split(sep).filter(Boolean).pop() ?? s.downloadDir;
+  const text = s.categoryFolders ? 'Automatic, by type (Video, Music, Documents…)' : `Automatic: …${sep}${last}`;
+  for (const id of ['add-dir', 'browser-dir']) {
+    $(id).placeholder = text;
+    $(id).title = s.categoryFolders ? `${s.downloadDir}${sep}<type of file>` : s.downloadDir;
+  }
+}
+
+async function chooseFolder(input, title) {
+  const dir = await pick({ directory: true, title });
+  if (dir) {
+    input.value = dir;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+}
+
+// ---------------------------------------------------------------- refresh an expired link
+
+let refreshing = null;
+
+/** "Refresh link": tries the same link, else opens the download's page in the browser and
+ *  waits for the file to be downloaded there again, then continues with that fresh link. */
+export async function openRefresh(d) {
+  refreshing = d;
+  const pct = d.size ? Math.floor((d.downloaded / d.size) * 100) : null;
+  $('refresh-name').textContent = d.fileName;
+  $('refresh-name').title = d.fileName;
+  $('refresh-pct').textContent = pct != null ? `${pct}%` : 'where it stopped';
+  $('refresh-checking').hidden = false;
+  $('refresh-waiting').hidden = true;
+  $('refresh-paste').open = false;
+  $('refresh-url').value = '';
+  showError($('refresh-error'), '');
+  if (!$('dlg-refresh').open) $('dlg-refresh').showModal();
+  try {
+    const r = await invoke('refresh_link', { id: d.id, open: true });
+    if (refreshing?.id !== d.id) return;
+    if (r.resumed) {
+      closeRefresh();
+      toast(`The link works again. Continuing ${d.fileName}`);
+      return;
+    }
+    let host = r.pageUrl;
+    try { host = new URL(r.pageUrl).host; } catch { /* keep it */ }
+    $('refresh-page').textContent = host;
+    $('refresh-page').title = r.pageUrl;
+    $('refresh-reopen').dataset.url = r.pageUrl;
+    $('refresh-checking').hidden = true;
+    $('refresh-waiting').hidden = false;
+  } catch (e) {
+    $('refresh-checking').hidden = true;
+    showError($('refresh-error'), `Couldn't refresh it: ${e?.message ?? e}`);
+  }
+}
+
+/** Closing the dialog doesn't stop the wait: download the file in the browser within
+ *  15 minutes and it still continues here. */
+function closeRefresh() {
+  refreshing = null;
+  if ($('dlg-refresh').open) $('dlg-refresh').close();
+}
+
 // ---------------------------------------------------------------- add
 
 let addState = { media: null, torrentFile: null };
@@ -36,7 +109,9 @@ export function openAdd({ url = '' } = {}) {
   showError($('add-error'), '');
   run(invoke('get_settings'), 'Couldn\'t read settings').then((s) => {
     fillSectionSelect($('add-sections'), s?.defaultConnections ?? 8);
+    autoPlaceholder(s);
   });
+  syncPathfields();
   $('add-queue').replaceChildren(
     Object.assign(document.createElement('option'), { value: '', textContent: 'No queue (start now)' }),
     ...queues.map((q) => Object.assign(document.createElement('option'), { value: String(q.id), textContent: `${q.name}${q.running ? ' (running)' : ''}` })),
@@ -204,6 +279,8 @@ function openBrowser({ items, source, title, note, queueId = null }) {
   run(invoke('get_settings'), '').then((s) => fillSectionSelect($('browser-sections'), s?.defaultConnections ?? 8));
   syncBrowserCount();
   $('browser-dir').value = '';
+  syncPathfields();
+  invoke('get_settings').then(autoPlaceholder).catch(() => {});
   void source;
   $('dlg-browser').showModal();
 }
@@ -422,9 +499,36 @@ export function initDialogs() {
   // Add
   $('add-check').addEventListener('click', check);
   $('add-url').addEventListener('change', check);
-  $('add-browse').addEventListener('click', async () => {
-    const dir = await pick({ directory: true, title: 'Save downloads to' });
-    if (dir) $('add-dir').value = dir;
+  // Folder fields: Choose… opens the folder picker; × goes back to automatic.
+  $('add-browse').addEventListener('click', () => chooseFolder($('add-dir'), 'Save this download in'));
+  $('browser-browse').addEventListener('click', () => chooseFolder($('browser-dir'), 'Save these downloads in'));
+  for (const id of ['add-dir', 'browser-dir']) {
+    $(id).addEventListener('input', syncPathfields);
+    $(`${id}-clear`).addEventListener('click', () => { $(id).value = ''; syncPathfields(); $(id).focus(); });
+  }
+
+  // Refresh an expired link.
+  $('refresh-cancel').addEventListener('click', () => closeRefresh());
+  $('dlg-refresh').addEventListener('close', () => { refreshing = null; });
+  $('refresh-reopen').addEventListener('click', () => run(invoke('open_page', { url: $('refresh-reopen').dataset.url }), 'Couldn\'t open the page'));
+  $('refresh-form').addEventListener('submit', (e) => e.preventDefault());
+  $('refresh-url').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('refresh-use').click(); } });
+  $('refresh-use').addEventListener('click', async () => {
+    const url = $('refresh-url').value.trim();
+    if (!/^https?:\/\//i.test(url)) return showError($('refresh-error'), 'Paste a link that starts with http:// or https://.');
+    const d = refreshing;
+    if (!d) return;
+    try {
+      await invoke('refresh_address', { id: d.id, url });
+      closeRefresh();
+      toast(`New link set. Continuing ${d.fileName}`);
+    } catch (e) {
+      showError($('refresh-error'), `That link didn't work: ${e?.message ?? e}`);
+    }
+  });
+  listen('link-refreshed', (r) => {
+    if (refreshing?.id === r.id) closeRefresh();
+    toast(`Got a fresh link. Continuing ${r.fileName}`);
   });
   $('add-torrent').addEventListener('click', async () => {
     const file = await pick({ title: 'Open a .torrent file', filters: [{ name: 'Torrent files', extensions: ['torrent'] }] });
@@ -434,7 +538,8 @@ export function initDialogs() {
     infoBox([['Torrent file:', file.split(/[\\/]/).pop()], ['Privacy:', await privacyText()]]);
     $('add-sections').disabled = true;
   });
-  $('add-form').addEventListener('submit', (e) => { e.preventDefault(); submitAdd(true); });
+  // Enter starts the download, or adds it to the chosen queue.
+  $('add-form').addEventListener('submit', (e) => { e.preventDefault(); submitAdd(!$('add-queue').value); });
   $('add-later').addEventListener('click', () => submitAdd(false));
 
   // Add: label follows the queue picker
@@ -532,6 +637,8 @@ function syncAddButtons() {
   const inQueue = !!$('add-queue').value;
   $('add-later').textContent = inQueue ? 'Add to queue' : 'Add to list';
   $('add-start').hidden = inQueue;
+  // In a queue, "Add to queue" is the only way forward, so it's the main button.
+  $('add-later').classList.toggle('primary', inQueue);
 }
 
 // ---------------------------------------------------------------- schedule

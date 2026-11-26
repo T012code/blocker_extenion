@@ -83,12 +83,14 @@ function row(d) {
   name.textContent = d.fileName;
   name.title = d.fileName;
 
-  const what = action(d.status);
+  // An expired file download continues with a fresh link, not with the dead one.
+  const what = d.status === 'needsRefresh' && d.kind === 'file' ? 'refresh' : action(d.status);
   let btn = document.createElement('span');
   if (what) {
     btn = document.createElement('button');
-    btn.className = `act ${what === 'continue' ? 'go' : ''}`;
-    btn.textContent = d.status === 'seeding' ? 'Stop sharing' : what === 'pause' ? 'Pause' : 'Continue';
+    btn.className = `act ${what === 'pause' ? '' : 'go'}`;
+    btn.textContent = d.status === 'seeding' ? 'Stop sharing' : what === 'pause' ? 'Pause' : what === 'refresh' ? 'Refresh link' : 'Continue';
+    if (what === 'refresh') btn.title = 'Tries the link again; if it still fails, opens the page it came from. Download it there again and it continues here.';
     btn.disabled = busy.has(d.id);
     if (what === 'pause' && !d.resumable) {
       btn.title = 'This server can\'t resume downloads. Continuing later starts the file again from the beginning.';
@@ -118,7 +120,7 @@ function row(d) {
     if (d.kind === 'file') parts.push(`${d.connections} sections`);
   }
   if (d.status === 'seeding') parts.push('done, sharing with others');
-  if (d.status === 'needsRefresh') parts.push('download it again from the page to continue');
+  if (d.status === 'needsRefresh') parts.push(d.kind === 'file' ? 'refresh the link to continue' : 'download it again from the page to continue');
   if (d.status === 'blocked' && d.error) parts.push(d.error);
   meta.textContent = parts.filter(Boolean).join(' · ');
   meta.prepend(stateOf(d), parts.length ? ' · ' : '');
@@ -168,7 +170,16 @@ async function toggle(id, what) {
   busy.add(id);
   render(lastItems);
   try {
-    await ask({ type: what === 'pause' ? 'pause' : 'resume', id });
+    if (what === 'refresh') {
+      const r = await ask({ type: 'refreshLink', id });
+      if (r.type === 'error') throw new Error(r.message);
+      if (r.type === 'refresh' && !r.resumed && r.pageUrl) {
+        $('status-detail').textContent = 'Download the file again on the page that opened. It continues here from where it stopped.';
+        await api.tabs.create({ url: r.pageUrl });
+      }
+    } else {
+      await ask({ type: what === 'pause' ? 'pause' : 'resume', id });
+    }
   } catch (e) {
     $('status-detail').textContent = `Couldn't ${what}: ${e.message}`;
   }

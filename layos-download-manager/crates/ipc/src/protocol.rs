@@ -99,6 +99,9 @@ pub enum Request {
     /// Which formats can be downloaded from this page or stream? `item.url` is the page
     /// (or playlist) address, with the browser's cookies.
     MediaFormats { item: Box<BrowserDownload> },
+    /// An expired link: try it again, or else wait for the browser to send a fresh one
+    /// for this download (from `pageUrl` in the answer).
+    RefreshLink { id: i64 },
 }
 
 impl Request {
@@ -137,6 +140,13 @@ pub enum Response {
     },
     Error {
         message: String,
+    },
+    /// Answer to `RefreshLink`: `resumed` when the old link works again; otherwise open
+    /// `page_url` in the browser and download the file there again.
+    #[serde(rename_all = "camelCase")]
+    Refresh {
+        resumed: bool,
+        page_url: Option<String>,
     },
 }
 

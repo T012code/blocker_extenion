@@ -9,7 +9,7 @@ pub mod queues;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use ldm_engine::{
     Download, DownloadKind, DownloadStatus, Engine, Event, MediaSpec, NewDownload, RequestInfo,
@@ -28,6 +28,21 @@ pub trait Frontend: Send + Sync {
         false
     }
     fn show(&self) {}
+    /// An expired download got a fresh link from the browser and is continuing.
+    fn refreshed(&self, _download: &Download) {}
+}
+
+/// How long a download waits for the browser to send its fresh link.
+const REFRESH_WAIT: Duration = Duration::from_secs(15 * 60);
+
+/// What `refresh_link` did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Refresh {
+    /// The old link works again: the download is continuing.
+    Resumed,
+    /// Waiting for a fresh link: open this page (where the file was found, or else the
+    /// link itself) and download the file there again.
+    OpenPage(String),
 }
 
 /// No window: everything is added and started (headless runner, tests).
@@ -47,6 +62,8 @@ pub struct Service {
     live: Live,
     /// yt-dlp and ffmpeg, for the video button's format list.
     media_tools: Tools,
+    /// Expired downloads waiting for a fresh link from the browser, until when.
+    waiting: Arc<Mutex<HashMap<i64, Instant>>>,
 }
 
 impl Service {
@@ -85,6 +102,7 @@ impl Service {
             frontend,
             live,
             media_tools: Tools::default(),
+            waiting: Arc::default(),
         }
     }
 
@@ -139,7 +157,111 @@ impl Service {
                 Err(e) => Response::error(e.to_string()),
             },
             Request::MediaFormats { item } => self.media_formats(*item).await,
+            Request::RefreshLink { id } => match self.refresh_link(id).await {
+                Ok(Refresh::Resumed) => Response::Refresh {
+                    resumed: true,
+                    page_url: None,
+                },
+                Ok(Refresh::OpenPage(url)) => Response::Refresh {
+                    resumed: false,
+                    page_url: Some(url),
+                },
+                Err(e) => Response::error(e),
+            },
         }
+    }
+
+    /// Gets a download whose link expired going again. First the same link is tried
+    /// (some servers refuse only for a while); if it still fails, the download waits for
+    /// the browser to send the same file again, and takes over that fresh link, keeping
+    /// what was already downloaded.
+    pub async fn refresh_link(&self, id: i64) -> Result<Refresh, String> {
+        let d = self.engine.get(id).map_err(|e| e.to_string())?;
+        if !matches!(d.kind, DownloadKind::Http) {
+            return Err("only file downloads have a link to refresh".into());
+        }
+        if d.status == DownloadStatus::Completed || self.engine.is_running(id) {
+            return Err("this download doesn't need a new link".into());
+        }
+        if let Ok(info) = self.engine.probe(&d.request).await
+            && (d.size.is_none() || info.size.is_none() || info.size == d.size)
+        {
+            self.engine
+                .refresh_address(id, d.request.clone())
+                .await
+                .map_err(|e| e.to_string())?;
+            self.engine.start(id).map_err(|e| e.to_string())?;
+            self.waiting.lock().unwrap().remove(&id);
+            return Ok(Refresh::Resumed);
+        }
+        self.waiting
+            .lock()
+            .unwrap()
+            .insert(id, Instant::now() + REFRESH_WAIT);
+        let page = d
+            .request
+            .referer
+            .clone()
+            .filter(|r| is_web_url(r))
+            .unwrap_or_else(|| d.request.url.clone());
+        Ok(Refresh::OpenPage(page))
+    }
+
+    /// Stops waiting for a fresh link for this download.
+    pub fn cancel_refresh(&self, id: i64) {
+        self.waiting.lock().unwrap().remove(&id);
+    }
+
+    /// Ids of downloads waiting for a fresh link.
+    pub fn waiting_for_link(&self) -> Vec<i64> {
+        let now = Instant::now();
+        let mut w = self.waiting.lock().unwrap();
+        w.retain(|_, until| *until > now);
+        w.keys().copied().collect()
+    }
+
+    /// If the browser sent a file that an expired download is waiting for, gives that
+    /// download the fresh link and continues it. A download waiting after "Refresh link"
+    /// matches by name or by size; any other expired download only when both match.
+    async fn take_fresh_link(&self, item: &BrowserDownload) -> Option<i64> {
+        if item.media.is_some() || !is_web_url(&item.url) {
+            return None;
+        }
+        let waiting = self.waiting_for_link();
+        let names = candidate_names(item);
+        let found = self.engine.list().into_iter().find(|d| {
+            if !matches!(d.kind, DownloadKind::Http) || self.engine.is_running(d.id) {
+                return false;
+            }
+            let name = names.iter().any(|n| n.eq_ignore_ascii_case(&d.file_name));
+            let size = d.size.is_some() && item.file_size == d.size;
+            if waiting.contains(&d.id) {
+                matches!(
+                    d.status,
+                    DownloadStatus::NeedsRefresh | DownloadStatus::Failed | DownloadStatus::Paused
+                ) && (name || size)
+            } else {
+                d.status == DownloadStatus::NeedsRefresh && name && size
+            }
+        })?;
+        let non_empty = |s: &Option<String>| s.clone().filter(|s| !s.trim().is_empty());
+        let request = RequestInfo {
+            url: item.url.clone(),
+            referer: non_empty(&item.referer).or(found.request.referer.clone()),
+            cookies: non_empty(&item.cookies),
+            user_agent: non_empty(&item.user_agent).or(found.request.user_agent.clone()),
+            headers: Vec::new(),
+        };
+        if let Err(e) = self.engine.refresh_address(found.id, request).await {
+            tracing::warn!("could not use the fresh link for {}: {e}", found.file_name);
+            return None;
+        }
+        self.waiting.lock().unwrap().remove(&found.id);
+        if let Err(e) = self.engine.start(found.id) {
+            tracing::warn!("could not continue {}: {e}", found.file_name);
+        }
+        self.frontend.refreshed(&found);
+        Some(found.id)
     }
 
     async fn media_formats(&self, item: BrowserDownload) -> Response {
@@ -183,12 +305,25 @@ impl Service {
         if items.is_empty() {
             return Response::error("no links to download");
         }
+        // Fresh links for expired downloads continue those instead of adding new ones.
+        let mut refreshed = Vec::new();
+        let mut rest = Vec::new();
+        for item in items {
+            match self.take_fresh_link(&item).await {
+                Some(id) => refreshed.push(id),
+                None => rest.push(item),
+            }
+        }
+        if rest.is_empty() {
+            return Response::Accepted { ids: refreshed };
+        }
+        let items = rest;
         // Several links always go to the window so the user can pick, when there is one.
         let wants_window = ask.unwrap_or(true) || source == Source::AllLinks;
         if wants_window && self.frontend.ask(&items, source) {
             return Response::Accepted { ids: Vec::new() };
         }
-        let mut ids = Vec::new();
+        let mut ids = refreshed;
         let mut last_error = None;
         for item in items {
             match self.engine.add(to_new_download(item, true)).await {
@@ -201,6 +336,51 @@ impl Service {
             _ => Response::Accepted { ids },
         }
     }
+}
+
+/// The names the browser's file could have: what the browser says, and the link's
+/// last path segment (decoded).
+fn candidate_names(item: &BrowserDownload) -> Vec<String> {
+    let mut names = Vec::new();
+    if let Some(n) = item
+        .file_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+    {
+        names.push(n.to_string());
+    }
+    if let Ok(u) = reqwest::Url::parse(&item.url)
+        && let Some(last) = u.path_segments().and_then(|mut s| s.next_back())
+        && !last.is_empty()
+    {
+        names.push(percent_decode(last));
+    }
+    names
+}
+
+fn percent_decode(s: &str) -> String {
+    let hex = |c: u8| (c as char).to_digit(16).map(|v| v as u8);
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        match (
+            b[i],
+            b.get(i + 1).and_then(|&c| hex(c)),
+            b.get(i + 2).and_then(|&c| hex(c)),
+        ) {
+            (b'%', Some(h), Some(l)) => {
+                out.push(h * 16 + l);
+                i += 3;
+            }
+            (c, _, _) => {
+                out.push(c);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 fn is_web_url(url: &str) -> bool {

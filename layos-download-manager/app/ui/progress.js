@@ -45,7 +45,7 @@ const HINT = {
   paused: 'Paused. Continue whenever you like.',
   queued: 'Waiting to start.',
   connecting: 'Connecting to the server…',
-  needsRefresh: 'The link expired. Download it again from its web page to carry on from here.',
+  needsRefresh: 'The link expired. Refresh it to carry on from here.',
   blocked: 'Waiting for your VPN or proxy before it connects to anyone.',
   failed: 'It stopped with a problem. Continue to try again.',
   seeding: 'Done. Sharing with others until the share ratio is reached.',
@@ -103,10 +103,12 @@ function render() {
   const act = action(d.status);
   const b = $('pause');
   b.disabled = !act;
-  const want = act === 'continue' ? 'continue' : 'pause';
+  const refresh = d.status === 'needsRefresh' && (d.kind?.type ?? 'http') === 'http';
+  const want = refresh ? 'refresh' : act === 'continue' ? 'continue' : 'pause';
   if (b.dataset.act !== want) {
     b.dataset.act = want;
-    b.replaceChildren(icon(want === 'continue' ? 'play' : 'pause'), Object.assign(document.createElement('span'), { className: 'label', textContent: want === 'continue' ? 'Continue' : 'Pause' }));
+    const [ico, text] = { refresh: ['refresh', 'Refresh link'], continue: ['play', 'Continue'], pause: ['pause', 'Pause'] }[want];
+    b.replaceChildren(icon(ico), Object.assign(document.createElement('span'), { className: 'label', textContent: text }));
   }
 }
 
@@ -172,7 +174,8 @@ $('hide').addEventListener('click', () => invoke('window_close'));
 $('close').addEventListener('click', () => invoke('window_close'));
 $('pause').addEventListener('click', () => {
   if (!d) return;
-  if ($('pause').dataset.act === 'continue') run(invoke('resume', { ids: [d.id] }), 'Couldn\'t continue');
+  if ($('pause').dataset.act === 'refresh') run(invoke('request_refresh', { id: d.id }), 'Couldn\'t open the app');
+  else if ($('pause').dataset.act === 'continue') run(invoke('resume', { ids: [d.id] }), 'Couldn\'t continue');
   else run(invoke('pause', { ids: [d.id] }), 'Couldn\'t pause');
 });
 $('open').addEventListener('click', async () => {

@@ -54,7 +54,19 @@ for (const scheme of ['light', 'dark']) {
   await page.locator('#add-info:not([hidden])').waitFor();
   await page.waitForTimeout(300);
   await shot(page, 'app-add');
+  await page.click('#add-browse');
+  await page.waitForTimeout(300);
+  await shot(page, 'app-add-folder-chosen');
   await page.keyboard.press('Escape');
+  // An expired link: the refresh dialog waits for the browser.
+  await page.locator('#rows tr', { hasText: 'setup.exe' }).click();
+  await page.click('#btn-resume');
+  await page.locator('#refresh-waiting:not([hidden])').waitFor();
+  await page.click('#refresh-paste summary');
+  await page.waitForTimeout(400);
+  await shot(page, 'app-refresh-link');
+  await page.keyboard.press('Escape');
+  await page.locator('#rows tr', { hasText: 'ubuntu' }).click();
   await page.click('#btn-add');
   await page.fill('#add-url', 'https://video.example.com/watch?v=keynote');
   await page.click('#add-check');
@@ -204,7 +216,7 @@ for (const scheme of ['light', 'dark']) {
   ctx.serviceWorkers().find(ours) ?? await ctx.waitForEvent('serviceworker', { predicate: ours });
   const id = 'chrome-extension://klknhohjiaanbbicfdonmcnflkgjofai';
   const popup = await ctx.newPage();
-  await popup.setViewportSize({ width: 380, height: 560 });
+  await popup.setViewportSize({ width: 360, height: 480 }); // a real pop-up is as tall as its content (at least 480)
   await popup.goto(`${id}/popup/popup.html`);
   await popup.waitForTimeout(1500);
   await shot(popup, `ext-popup-${scheme}`);

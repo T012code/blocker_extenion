@@ -203,14 +203,89 @@ pub fn set_speed_limit(state: S, id: i64, bytes_per_sec: u64) -> R<()> {
     state.engine.set_speed_limit(id, bytes_per_sec).map_err(err)
 }
 
+/// A new link pasted for a download: it continues from where it stopped (or starts
+/// over, if the file behind the new link is a different size). The old page and
+/// browser stay; its cookies are kept only for the same site.
 #[tauri::command]
 pub async fn refresh_address(state: S<'_>, id: i64, url: String) -> R<()> {
+    let old = state.engine.get(id).map_err(err)?.request;
+    let url = url.trim().to_string();
+    let host = |u: &str| reqwest_host(u);
+    let same_site = host(&url).is_some() && host(&url) == host(&old.url);
+    let request = RequestInfo {
+        cookies: if same_site { old.cookies } else { None },
+        headers: if same_site { old.headers } else { Vec::new() },
+        url,
+        referer: old.referer,
+        user_agent: old.user_agent,
+    };
     state
         .engine
-        .refresh_address(id, RequestInfo::new(url.trim()))
+        .refresh_address(id, request)
         .await
         .map_err(err)?;
+    state.service.cancel_refresh(id);
     state.engine.start(id).map_err(err)
+}
+
+fn reqwest_host(u: &str) -> Option<String> {
+    let rest = u.split_once("://")?.1;
+    let host = rest.split(['/', '?', '#']).next()?;
+    Some(host.rsplit('@').next()?.to_ascii_lowercase())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RefreshResult {
+    /// The old link works again; the download is continuing.
+    resumed: bool,
+    /// Otherwise the page opened in the browser, to download the file again from.
+    page_url: Option<String>,
+}
+
+/// "Refresh link": try the same link again; if the server still refuses it, open the
+/// page the file came from (or the link itself) in the browser and wait for the file
+/// to be downloaded there again, then continue this download with that fresh link.
+#[tauri::command]
+pub async fn refresh_link(state: S<'_>, id: i64, open: bool) -> R<RefreshResult> {
+    match state.service.refresh_link(id).await? {
+        ldm_service::Refresh::Resumed => Ok(RefreshResult {
+            resumed: true,
+            page_url: None,
+        }),
+        ldm_service::Refresh::OpenPage(page) => {
+            if open {
+                tauri_plugin_opener::open_url(&page, None::<&str>).map_err(err)?;
+            }
+            Ok(RefreshResult {
+                resumed: false,
+                page_url: Some(page),
+            })
+        }
+    }
+}
+
+/// Opens a page in the browser (for "Open the page" again in the refresh dialog).
+#[tauri::command]
+pub fn open_page(url: String) -> R<()> {
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err("only web pages can be opened".into());
+    }
+    tauri_plugin_opener::open_url(&url, None::<&str>).map_err(err)
+}
+
+/// Stop waiting for a fresh link (the refresh dialog was closed).
+#[tauri::command]
+pub fn cancel_refresh(state: S, id: i64) {
+    state.service.cancel_refresh(id);
+}
+
+/// A download's window asks the main window to refresh its link.
+#[tauri::command]
+pub fn request_refresh(app: tauri::AppHandle, id: i64) -> R<()> {
+    use tauri::Emitter;
+    crate::state::show_window(&app);
+    app.emit("refresh-request", id).map_err(err)
 }
 
 /// The file on disk (or its folder for a multi-file torrent).
