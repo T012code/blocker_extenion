@@ -14,6 +14,6 @@ pub mod store;
 mod transfer;
 
 pub use category::Category;
-pub use engine::{Engine, EngineConfig, MAX_CONNECTIONS};
+pub use engine::{Engine, EngineConfig, MAX_CONNECTIONS, SECTION_PRESETS};
 pub use error::{Error, Result};
 pub use model::*;

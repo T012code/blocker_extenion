@@ -704,3 +704,168 @@ async fn idle_connections_take_over_slow_sections() {
     assert!(secs < 1.6, "slow section held up the download: {secs:.2}s");
     println!("slow tail: {most_sections} sections after re-splitting, done in {secs:.2}s");
 }
+
+/// Watches the live section map until `pred` holds for the number of active connections.
+async fn wait_active(engine: &Engine, id: i64, pred: impl Fn(usize) -> bool, what: &str) -> usize {
+    let mut rx = engine.subscribe();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while Instant::now() < deadline {
+        if let Ok(Ok(Event::Progress {
+            id: pid, segments, ..
+        })) = tokio::time::timeout(Duration::from_millis(500), rx.recv()).await
+        {
+            let active = segments.iter().filter(|s| s.active).count();
+            if pid == id && pred(active) {
+                return active;
+            }
+        }
+    }
+    panic!("download {id}: never reached {what}");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn default_section_count_is_saved() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut cfg = config(dir.path());
+    cfg.db_path = Some(dir.path().join("ldm.db"));
+    {
+        let engine = Engine::open(cfg.clone()).unwrap();
+        assert_eq!(engine.default_connections(), 8);
+        assert_eq!(engine.set_default_connections(32).unwrap(), 32);
+        assert_eq!(
+            engine.set_default_connections(250).unwrap(),
+            ldm_engine::MAX_CONNECTIONS
+        );
+        engine.set_default_connections(16).unwrap();
+    }
+    let engine = Engine::open(cfg).unwrap();
+    assert_eq!(
+        engine.default_connections(),
+        16,
+        "the choice should survive a restart"
+    );
+    let id = engine
+        .add(NewDownload {
+            start: false,
+            ..new_download("http://127.0.0.1:9/x.bin".into())
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        engine.get(id).unwrap().connections,
+        16,
+        "new downloads use the default"
+    );
+    assert!(ldm_engine::SECTION_PRESETS.contains(&8) && ldm_engine::SECTION_PRESETS.contains(&64));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn more_sections_while_downloading() {
+    let data = test_data(8 * MB);
+    let server = TestServer::start(
+        data.clone(),
+        ServerOptions {
+            throttle: Some(512 * 1024),
+            ..Default::default()
+        },
+    )
+    .await;
+    let dir = tempfile::tempdir().unwrap();
+    let engine = Engine::open(config(dir.path())).unwrap();
+    let id = engine
+        .add(NewDownload {
+            connections: Some(2),
+            ..new_download(server.url("/f.bin"))
+        })
+        .await
+        .unwrap();
+    wait_bytes(&engine, id, 200_000).await;
+    assert!(server.state.max_active.load(Ordering::SeqCst) <= 3);
+
+    assert_eq!(engine.set_connections(id, 16).unwrap(), 16);
+    let active = wait_active(&engine, id, |n| n >= 16, "16 active sections").await;
+    let d = wait_status(
+        &engine,
+        id,
+        DownloadStatus::Completed,
+        Duration::from_secs(30),
+    )
+    .await;
+    assert_eq!(read(&d), data);
+    assert_eq!(d.connections, 16);
+    assert!(server.state.max_active.load(Ordering::SeqCst) >= 16);
+    println!("2 -> 16 sections while downloading: {active} active");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn fewer_sections_while_downloading() {
+    let data = test_data(8 * MB);
+    let server = TestServer::start(
+        data.clone(),
+        ServerOptions {
+            throttle: Some(256 * 1024),
+            ..Default::default()
+        },
+    )
+    .await;
+    let dir = tempfile::tempdir().unwrap();
+    let engine = Engine::open(config(dir.path())).unwrap();
+    let id = engine
+        .add(NewDownload {
+            connections: Some(16),
+            ..new_download(server.url("/f.bin"))
+        })
+        .await
+        .unwrap();
+    wait_active(&engine, id, |n| n >= 16, "16 active sections").await;
+
+    engine.set_connections(id, 2).unwrap();
+    let active = wait_active(&engine, id, |n| n <= 2, "2 or fewer active sections").await;
+    // The closed connections' unfinished sections are finished by the two that remain.
+    server.set_options(|o| o.throttle = None);
+    let d = wait_status(
+        &engine,
+        id,
+        DownloadStatus::Completed,
+        Duration::from_secs(30),
+    )
+    .await;
+    assert_eq!(read(&d), data);
+    println!("16 -> 2 sections while downloading: {active} active");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn section_count_change_on_paused_download_applies_on_resume() {
+    let data = test_data(8 * MB);
+    let server = TestServer::start(
+        data.clone(),
+        ServerOptions {
+            throttle: Some(512 * 1024),
+            ..Default::default()
+        },
+    )
+    .await;
+    let dir = tempfile::tempdir().unwrap();
+    let engine = Engine::open(config(dir.path())).unwrap();
+    let id = engine
+        .add(NewDownload {
+            connections: Some(4),
+            ..new_download(server.url("/f.bin"))
+        })
+        .await
+        .unwrap();
+    wait_bytes(&engine, id, 300_000).await;
+    engine.pause(id).await.unwrap();
+    engine.set_connections(id, 32).unwrap();
+    engine.start(id).unwrap();
+    wait_active(&engine, id, |n| n >= 32, "32 active sections after resume").await;
+    server.set_options(|o| o.throttle = None);
+    let d = wait_status(
+        &engine,
+        id,
+        DownloadStatus::Completed,
+        Duration::from_secs(30),
+    )
+    .await;
+    assert_eq!(read(&d), data);
+}

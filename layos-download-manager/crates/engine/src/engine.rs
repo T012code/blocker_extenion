@@ -20,10 +20,17 @@ use crate::model::{
     UNKNOWN_END,
 };
 use crate::store::Store;
-use crate::transfer::{self, Progress, Transfer, TransferOptions};
+use crate::transfer::{self, Progress, Sections, Transfer, TransferOptions};
 
 /// Most sections (parallel connections) one download may use.
 pub const MAX_CONNECTIONS: u8 = 64;
+
+/// Section counts offered in the app's drop-downs. Any value from 1 to
+/// [`MAX_CONNECTIONS`] can also be typed in.
+pub const SECTION_PRESETS: [u8; 9] = [1, 2, 4, 8, 16, 24, 32, 48, 64];
+
+/// Settings key for the default number of sections.
+const DEFAULT_SECTIONS_KEY: &str = "default_connections";
 
 #[derive(Debug, Clone)]
 pub struct EngineConfig {
@@ -86,6 +93,7 @@ struct Inner {
 struct Running {
     cancel: CancellationToken,
     limiter: Arc<Limiter>,
+    sections: Arc<Sections>,
     done: watch::Receiver<bool>,
 }
 
@@ -97,11 +105,19 @@ fn now_ms() -> i64 {
 }
 
 impl Engine {
-    pub fn open(config: EngineConfig) -> Result<Self> {
+    pub fn open(mut config: EngineConfig) -> Result<Self> {
         let store = match &config.db_path {
             Some(p) => Store::open(p)?,
             None => Store::in_memory()?,
         };
+        // The user's saved choice wins over the built-in default.
+        if let Some(n) = store
+            .get_setting(DEFAULT_SECTIONS_KEY)?
+            .and_then(|v| v.parse::<u8>().ok())
+        {
+            config.default_connections = n;
+        }
+        config.default_connections = config.default_connections.clamp(1, MAX_CONNECTIONS);
         let mut downloads = BTreeMap::new();
         for mut d in store.load_all()? {
             // The app closed while these were running.
@@ -260,19 +276,21 @@ impl Engine {
         }
         let cancel = CancellationToken::new();
         let limiter = Arc::new(Limiter::new(d.speed_limit));
+        let sections = Arc::new(Sections::new(d.connections as usize));
         let (done_tx, done_rx) = watch::channel(false);
         running.insert(
             id,
             Running {
                 cancel: cancel.clone(),
                 limiter: limiter.clone(),
+                sections: sections.clone(),
                 done: done_rx,
             },
         );
         drop(running);
         let inner = self.inner.clone();
         tokio::spawn(async move {
-            let result = drive(&inner, id, &cancel, limiter).await;
+            let result = drive(&inner, id, &cancel, limiter, sections).await;
             inner.running.lock().unwrap().remove(&id);
             let (status, error) = match result {
                 Ok(()) => (DownloadStatus::Completed, None),
@@ -399,12 +417,34 @@ impl Engine {
         Ok(())
     }
 
-    pub fn set_connections(&self, id: DownloadId, connections: u8) -> Result<()> {
+    /// Sets how many sections (parallel connections) a download uses, 1-64.
+    /// On a running download it applies at once: new connections open straight away,
+    /// or surplus ones close after saving what they have.
+    pub fn set_connections(&self, id: DownloadId, connections: u8) -> Result<u8> {
         self.get(id)?;
-        self.inner.update(id, true, |d| {
-            d.connections = connections.clamp(1, MAX_CONNECTIONS)
-        });
-        Ok(())
+        let n = connections.clamp(1, MAX_CONNECTIONS);
+        if let Some(r) = self.inner.running.lock().unwrap().get(&id) {
+            r.sections.set(n as usize);
+        }
+        self.inner.update(id, true, |d| d.connections = n);
+        Ok(n)
+    }
+
+    /// The number of sections new downloads get unless the user picks another.
+    pub fn default_connections(&self) -> u8 {
+        self.config().default_connections
+    }
+
+    /// Sets and saves the default number of sections for new downloads, 1-64.
+    pub fn set_default_connections(&self, connections: u8) -> Result<u8> {
+        let n = connections.clamp(1, MAX_CONNECTIONS);
+        self.inner
+            .store
+            .lock()
+            .unwrap()
+            .set_setting(DEFAULT_SECTIONS_KEY, &n.to_string())?;
+        self.update_config(|c| c.default_connections = n);
+        Ok(n)
     }
 
     pub fn set_queue(&self, id: DownloadId, queue_id: Option<i64>) -> Result<()> {
@@ -459,6 +499,7 @@ async fn drive(
     id: DownloadId,
     cancel: &CancellationToken,
     limiter: Arc<Limiter>,
+    sections: Arc<Sections>,
 ) -> Result<()> {
     inner.update(id, true, |d| {
         d.status = DownloadStatus::Connecting;
@@ -519,9 +560,7 @@ async fn drive(
     }
     if d.segments.is_empty() {
         d.segments = match (d.size, d.resumable) {
-            (Some(size), true) => {
-                transfer::plan(size, d.connections as usize, config.min_segment_size)
-            }
+            (Some(size), true) => transfer::plan(size, sections.wanted(), config.min_segment_size),
             (Some(0), false) => Vec::new(),
             (Some(size), false) => vec![Segment::new(0, size)],
             (None, _) => vec![Segment::new(0, UNKNOWN_END)],
@@ -531,7 +570,6 @@ async fn drive(
         }
     }
     d.status = DownloadStatus::Downloading;
-    let connections = d.connections as usize;
     let segments = d.segments.clone();
     inner.update(id, true, |rec| *rec = d.clone());
 
@@ -543,8 +581,9 @@ async fn drive(
         file: Arc::new(file),
         limiters: vec![inner.global_limiter.clone(), limiter],
         cancel: cancel.child_token(),
+        sections: sections.clone(),
+        live: Default::default(),
         options: TransferOptions {
-            connections,
             min_split: config.min_segment_size,
             max_retries: config.max_retries,
             retry_delay: config.retry_delay,

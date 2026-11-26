@@ -6,13 +6,14 @@
 //! segment simply stops reading when it reaches the new, earlier end.
 
 use std::fs::File;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use futures_util::StreamExt;
 use reqwest::header::RANGE;
 use reqwest::{Client, StatusCode};
+use tokio::sync::Notify;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
@@ -24,8 +25,32 @@ use crate::model::{RequestInfo, Segment, SegmentView, UNKNOWN_END};
 /// Bytes a connection collects before writing them to disk.
 const WRITE_BUFFER: usize = 512 * 1024;
 
+/// How many sections (connections) a running download should use. The user can change
+/// it while the download runs: extra connections open at once, surplus ones close after
+/// saving what they have, and their unfinished sections are picked up by the others.
+#[derive(Debug)]
+pub(crate) struct Sections {
+    wanted: AtomicUsize,
+    changed: Notify,
+}
+
+impl Sections {
+    pub fn new(n: usize) -> Self {
+        Self {
+            wanted: AtomicUsize::new(n.max(1)),
+            changed: Notify::new(),
+        }
+    }
+    pub fn wanted(&self) -> usize {
+        self.wanted.load(Ordering::SeqCst)
+    }
+    pub fn set(&self, n: usize) {
+        self.wanted.store(n.max(1), Ordering::SeqCst);
+        self.changed.notify_one();
+    }
+}
+
 pub(crate) struct TransferOptions {
-    pub connections: usize,
     /// A segment is only split when both halves would be at least this big.
     pub min_split: u64,
     /// Failed attempts in a row (without progress) before a connection gives up.
@@ -43,6 +68,36 @@ pub(crate) struct Transfer {
     /// Cancelled when the user pauses, or when one connection hits an error that stops all.
     pub cancel: CancellationToken,
     pub options: TransferOptions,
+    pub sections: Arc<Sections>,
+    /// Connections currently running.
+    pub live: AtomicUsize,
+}
+
+impl Transfer {
+    fn wanted(&self) -> usize {
+        if self.resumable {
+            self.sections.wanted()
+        } else {
+            1
+        }
+    }
+
+    /// Called by a connection between chunks: closes it if there are more than wanted.
+    fn try_retire(&self) -> bool {
+        let mut n = self.live.load(Ordering::SeqCst);
+        loop {
+            if n <= self.wanted() {
+                return false;
+            }
+            match self
+                .live
+                .compare_exchange(n, n - 1, Ordering::SeqCst, Ordering::SeqCst)
+            {
+                Ok(_) => return true,
+                Err(now) => n = now,
+            }
+        }
+    }
 }
 
 struct SegState {
@@ -190,29 +245,42 @@ impl Progress {
 
 /// Runs all connections until the file is complete, an error stops them, or the user pauses.
 pub(crate) async fn run(transfer: Arc<Transfer>, progress: Arc<Progress>) -> Result<()> {
-    let workers = if transfer.resumable {
-        transfer.options.connections.max(1)
-    } else {
-        1
-    };
     let mut set = JoinSet::new();
-    for _ in 0..workers {
+    let spawn = |set: &mut JoinSet<Result<()>>| {
+        transfer.live.fetch_add(1, Ordering::SeqCst);
         set.spawn(worker(transfer.clone(), progress.clone()));
+    };
+    for _ in 0..transfer.wanted() {
+        spawn(&mut set);
     }
     let mut first_err: Option<Error> = None;
-    while let Some(joined) = set.join_next().await {
-        let res = joined.unwrap_or_else(|e| Err(Error::Io(std::io::Error::other(e))));
-        if let Err(e) = res {
-            // Keep the real cause, not the "cancelled" the other connections report after it.
-            let replace = match &first_err {
-                None => true,
-                Some(Error::Cancelled) => !matches!(e, Error::Cancelled),
-                Some(_) => false,
-            };
-            if replace {
-                first_err = Some(e);
+    loop {
+        tokio::select! {
+            joined = set.join_next() => {
+                let Some(joined) = joined else { break };
+                let res = joined.unwrap_or_else(|e| Err(Error::Io(std::io::Error::other(e))));
+                if let Err(e) = res {
+                    // Keep the real cause, not the "cancelled" the other connections report after it.
+                    let replace = match &first_err {
+                        None => true,
+                        Some(Error::Cancelled) => !matches!(e, Error::Cancelled),
+                        Some(_) => false,
+                    };
+                    if replace {
+                        first_err = Some(e);
+                    }
+                    transfer.cancel.cancel();
+                }
             }
-            transfer.cancel.cancel();
+            // The user asked for more sections while downloading.
+            _ = transfer.sections.changed.notified() => {
+                while transfer.live.load(Ordering::SeqCst) < transfer.wanted()
+                    && !transfer.cancel.is_cancelled()
+                    && !progress.all_complete()
+                {
+                    spawn(&mut set);
+                }
+            }
         }
     }
     match first_err {
@@ -222,21 +290,45 @@ pub(crate) async fn run(transfer: Arc<Transfer>, progress: Arc<Progress>) -> Res
 }
 
 async fn worker(t: Arc<Transfer>, p: Arc<Progress>) -> Result<()> {
-    while let Some(i) = p.claim(t.resumable, t.options.min_split) {
-        let res = fetch_segment(&t, &p, i).await;
-        p.release(i);
-        res?;
+    let res = work(&t, &p).await;
+    if !matches!(res, Ok(Exit::Retired)) {
+        t.live.fetch_sub(1, Ordering::SeqCst);
     }
-    Ok(())
+    res.map(|_| ())
+}
+
+enum Exit {
+    /// Nothing left to fetch.
+    Done,
+    /// Closed because the user lowered the number of sections.
+    Retired,
+}
+
+async fn work(t: &Transfer, p: &Progress) -> Result<Exit> {
+    loop {
+        if t.try_retire() {
+            return Ok(Exit::Retired);
+        }
+        let Some(i) = p.claim(t.resumable, t.options.min_split) else {
+            return Ok(Exit::Done);
+        };
+        let res = fetch_segment(t, p, i).await;
+        p.release(i);
+        if matches!(res?, Exit::Retired) {
+            return Ok(Exit::Retired);
+        }
+    }
 }
 
 enum StreamEnd {
     Complete,
     /// The server closed the connection before the segment was done.
     Short,
+    /// This connection closed itself to lower the section count.
+    Retired,
 }
 
-async fn fetch_segment(t: &Transfer, p: &Progress, i: usize) -> Result<()> {
+async fn fetch_segment(t: &Transfer, p: &Progress, i: usize) -> Result<Exit> {
     let mut failures = 0u32;
     loop {
         if t.cancel.is_cancelled() {
@@ -244,10 +336,11 @@ async fn fetch_segment(t: &Transfer, p: &Progress, i: usize) -> Result<()> {
         }
         let (from, to) = p.rewind(i);
         if from >= to {
-            return Ok(());
+            return Ok(Exit::Done);
         }
         let err = match stream_range(t, p, i, from, to).await {
-            Ok(StreamEnd::Complete) => return Ok(()),
+            Ok(StreamEnd::Complete) => return Ok(Exit::Done),
+            Ok(StreamEnd::Retired) => return Ok(Exit::Retired),
             Ok(StreamEnd::Short) => None,
             Err(Error::Cancelled) => return Err(Error::Cancelled),
             Err(e) if e.is_transient() => Some(e),
@@ -341,6 +434,9 @@ async fn stream_range(
         }
         if full {
             break Ok(StreamEnd::Complete);
+        }
+        if t.try_retire() {
+            break Ok(StreamEnd::Retired);
         }
     };
     // Whatever happened, keep the bytes we already have.

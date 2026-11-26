@@ -26,9 +26,21 @@ conn 1 is done, conn 8 is slow: conn 1 takes over half of what's left of section
 
 If the server doesn't support byte ranges, it downloads over one connection, the same way a browser does.
 
+### Choosing the number of sections
+
+You choose how many sections a file is split into: **1, 2, 4, 8, 16, 24, 32, 48 or 64**, or type any number from 1 to 64.
+
+| Where | What it changes |
+| --- | --- |
+| **Settings → Connection → Default sections** | Every new download. Saved, and kept after restarting the app. Default: 8. |
+| **Add download dialog → Sections** | Just this download. |
+| **Right-click a download → Sections**, or the download's progress window | A download that's already in the list, **even while it's downloading**. Raising the number opens new connections at once, which take over halves of the biggest sections. Lowering it closes the extra connections after they save what they've fetched, and the remaining connections finish their sections. |
+
+More sections help most on fast connections and servers that limit speed per connection. Some servers limit how many connections one computer may open and refuse extra ones, so 8 or 16 is a good default and 32–64 is for servers that allow it.
+
 ## What the engine does
 
-- Multi-section downloads with 1–64 connections and dynamic re-splitting (above)
+- Multi-section downloads with 1–64 connections, chosen by you and changeable while downloading, with dynamic re-splitting (above)
 - Pause and resume, also after closing the app or a crash. Progress is saved every 2 seconds to a local SQLite database.
 - Automatic retry with back-off when a connection drops. Only the missing bytes are fetched again.
 - Detects when a link has expired (HTTP 401/403/404/410) and lets you give the download a fresh link without losing progress
