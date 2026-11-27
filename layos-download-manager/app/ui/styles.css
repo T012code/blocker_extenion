@@ -211,6 +211,12 @@ body.resizing-x, body.resizing-x * { cursor: col-resize !important; user-select:
 .type-folder-name { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); font-weight: 560; }
 .type-folder-name .icon { color: var(--ink-muted); }
 .type-folder .pathfield { height: 36px; }
+.type-exts { display: grid; gap: var(--space-2); margin-top: var(--space-2); }
+.type-ext { display: grid; grid-template-columns: 120px minmax(0, 1fr) auto; gap: var(--space-3); align-items: start; }
+.type-ext .type-folder-name { padding-top: var(--space-2); }
+.type-ext textarea { min-height: 56px; font-family: var(--font-mono); font-size: var(--text-xs); line-height: 1.5; padding: var(--space-2) var(--space-3); border: 1px solid var(--rule-strong); border-radius: var(--radius-sm); background: var(--paper); color: var(--ink); resize: vertical; width: 100%; }
+.type-ext textarea:focus-visible { outline-offset: 0; box-shadow: none; }
+.type-ext .btn { margin-top: var(--space-1); }
 .type-folder .pathfield input[type=text] { padding-left: var(--space-3); }
 .banner:not([hidden]), .queuebar:not([hidden]) { animation: strip-in var(--dur-base) var(--ease-out); }
 @keyframes strip-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
@@ -342,7 +348,7 @@ tr.downloading .status .icon, .status.live .icon { animation: nudge 1.4s var(--e
 
 /* ---------- menus (context menu, All downloads) */
 .menu {
-  position: fixed; z-index: 50; min-width: 220px; padding: var(--space-1); border-radius: var(--radius-md);
+  position: fixed; z-index: 50; min-width: 220px; max-height: calc(100vh - 16px); overflow-y: auto; overscroll-behavior: contain; padding: var(--space-1); border-radius: var(--radius-md);
   background: var(--card); border: 1px solid var(--rule); box-shadow: var(--shadow-float);
   transform-origin: top left; animation: pop-in var(--dur-base) var(--ease-out);
 }
@@ -372,7 +378,31 @@ dialog::backdrop { background: oklch(16% 0.03 266 / 0.45); animation: fade-in va
 dialog:has(.dialog.wide) { width: min(720px, calc(100vw - 32px)); }
 @keyframes dialog-in { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: none; } }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
-.dialog { display: grid; gap: var(--space-4); padding: var(--space-6); }
+/* Dialogs taller than the window scroll in the middle; the title and the buttons stay. */
+dialog { max-height: calc(100dvh - 32px); overflow: hidden; }
+.dialog {
+  display: grid; gap: var(--space-4); padding: var(--space-6);
+  max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable;
+}
+.dialog > h2:first-child, .dialog > .dialog-head:first-child {
+  position: sticky; top: calc(var(--space-6) * -1); z-index: 3;
+  margin: calc(var(--space-6) * -1) calc(var(--space-6) * -1) 0; padding: var(--space-6) var(--space-6) var(--space-2);
+  background: var(--card);
+}
+.dialog > .actions {
+  position: sticky; bottom: calc(var(--space-6) * -1); z-index: 3;
+  margin: 0 calc(var(--space-6) * -1) calc(var(--space-6) * -1); padding: var(--space-3) var(--space-6) var(--space-6);
+  background: var(--card);
+}
+/* Only when there's more to scroll: a hairline under the title and above the buttons. */
+.dialog.scrolls > h2:first-child, .dialog.scrolls > .dialog-head:first-child { box-shadow: 0 1px 0 var(--rule); }
+.dialog.scrolls > .actions { box-shadow: 0 -1px 0 var(--rule); }
+/* Settings: the section list stays in view while a long section scrolls. */
+.settings .tabs { position: sticky; top: 62px; align-self: start; z-index: 2; background: var(--card); }
+@media (max-width: 960px) {
+  /* One column: the sections become a row that stays under the title. */
+  .settings .tabs { margin: 0 calc(var(--space-6) * -1); padding: var(--space-1) var(--space-6) var(--space-2); box-shadow: 0 1px 0 var(--rule); }
+}
 dialog:has(.dialog.narrow) { width: min(460px, calc(100vw - 32px)); }
 .dialog h2 { font-size: var(--text-xl); }
 .dialog .lead { color: var(--ink-muted); margin-top: calc(var(--space-2) * -1); }

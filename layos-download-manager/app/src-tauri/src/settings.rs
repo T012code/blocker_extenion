@@ -19,6 +19,9 @@ pub struct AppSettings {
     pub category_folders: bool,
     /// Folders chosen for some types of file, instead of `<download folder>/<Type>`.
     pub category_dirs: std::collections::BTreeMap<ldm_engine::Category, PathBuf>,
+    /// The user's own file-extension lists for some types (Video, Music, Documents,
+    /// Compressed, Programs) instead of the built-in ones.
+    pub category_extensions: std::collections::BTreeMap<ldm_engine::Category, Vec<String>>,
     /// When a link that was downloaded before comes in: ask, download it again, or
     /// open (or continue) the one already there.
     pub duplicates: Duplicates,
@@ -63,6 +66,18 @@ pub enum Duplicates {
     Existing,
 }
 
+/// "MP4", ".mkv", " avi " → "mp4", "mkv", "avi", without repeats.
+pub fn clean_extensions(list: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for e in list {
+        let e = e.trim().trim_start_matches('.').to_ascii_lowercase();
+        if !e.is_empty() && e.chars().all(|c| c.is_ascii_alphanumeric()) && !out.contains(&e) {
+            out.push(e);
+        }
+    }
+    out
+}
+
 /// Version 2: browser downloads no longer ask first; they start with their own window.
 const VERSION: u32 = 2;
 
@@ -73,6 +88,7 @@ impl Default for AppSettings {
             download_dir: PathBuf::new(),
             category_folders: true,
             category_dirs: Default::default(),
+            category_extensions: Default::default(),
             duplicates: Duplicates::Ask,
             default_connections: 8,
             global_speed_limit: 0,
@@ -159,7 +175,13 @@ impl AppSettings {
             .filter(|(_, d)| !d.as_os_str().is_empty())
             .map(|(c, d)| (*c, d.clone()))
             .collect();
+        let extensions: std::collections::HashMap<_, _> = self
+            .category_extensions
+            .iter()
+            .map(|(c, list)| (*c, clean_extensions(list)))
+            .collect();
         engine.update_config(|c| {
+            c.category_extensions = extensions;
             c.download_dir = dir;
             c.category_folders = categories;
             c.category_dirs = chosen;
@@ -228,5 +250,28 @@ mod folder_tests {
         // Saved and read back.
         let back: AppSettings = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
         assert_eq!(back.category_dirs, s.category_dirs);
+    }
+}
+
+#[cfg(test)]
+mod extension_tests {
+    use super::*;
+
+    #[test]
+    fn edited_file_types_sort_new_downloads() {
+        let engine = ldm_engine::Engine::open(ldm_engine::EngineConfig::new("/tmp/x")).unwrap();
+        let mut s = AppSettings::default();
+        s.category_extensions.insert(
+            ldm_engine::Category::Programs,
+            vec!["EXE".into(), ".iso".into(), " msi ".into(), "iso".into()],
+        );
+        s.apply(&engine);
+        let c = engine.config();
+        assert_eq!(
+            c.category_extensions[&ldm_engine::Category::Programs],
+            vec!["exe", "iso", "msi"]
+        );
+        assert_eq!(c.category_of("ubuntu.iso"), ldm_engine::Category::Programs);
+        assert_eq!(c.category_of("a.zip"), ldm_engine::Category::Compressed);
     }
 }

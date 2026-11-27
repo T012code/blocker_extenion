@@ -88,6 +88,50 @@ function fillTypeFolders() {
   syncTypePlaceholders();
 }
 
+// ---------------------------------------------------------------- file extensions of each type
+
+const EXT_TYPES = [['video', 'Video'], ['music', 'Music'], ['documents', 'Documents'], ['compressed', 'Compressed'], ['programs', 'Programs']];
+let extDefaults = null;
+
+const parseExts = (text) => [...new Set(text.split(/[\s,;]+/).map((e) => e.trim().replace(/^\./, '').toLowerCase()).filter((e) => /^[a-z0-9]+$/.test(e)))];
+const sameList = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
+
+/** One editable list per type, filled with the user's list or the built-in one. */
+async function fillTypeExtensions() {
+  extDefaults ??= await invoke('category_defaults').catch(() => ({}));
+  const box = $('type-exts');
+  const chosen = current?.categoryExtensions ?? {};
+  box.replaceChildren(...EXT_TYPES.map(([key, name]) => {
+    const row = document.createElement('div');
+    row.className = 'type-ext';
+    const label = document.createElement('label');
+    label.className = 'type-folder-name';
+    label.htmlFor = `exts-${key}`;
+    label.append(icon(key), name);
+    const input = Object.assign(document.createElement('textarea'), { id: `exts-${key}`, rows: 2, spellcheck: false });
+    input.dataset.category = key;
+    input.value = (chosen[key] ?? extDefaults[key] ?? []).join(' ');
+    const reset = Object.assign(document.createElement('button'), { type: 'button', className: 'btn small subtle', textContent: 'Reset' });
+    reset.title = `Back to the built-in list for ${name.toLowerCase()}`;
+    const sync = () => { reset.disabled = sameList(parseExts(input.value), extDefaults[key] ?? []); };
+    input.addEventListener('input', sync);
+    reset.addEventListener('click', () => { input.value = (extDefaults[key] ?? []).join(' '); sync(); input.focus(); });
+    sync();
+    row.append(label, input, reset);
+    return row;
+  }));
+}
+
+/** Only the lists that differ from the built-in ones are saved. */
+function readTypeExtensions() {
+  const out = {};
+  for (const input of document.querySelectorAll('#type-exts textarea')) {
+    const list = parseExts(input.value);
+    if (!sameList(list, extDefaults?.[input.dataset.category] ?? [])) out[input.dataset.category] = list;
+  }
+  return out;
+}
+
 /** The default folder each type uses, shown when no folder is chosen. */
 function syncTypePlaceholders() {
   const f = form();
@@ -525,6 +569,7 @@ export async function openSettings(tab = 'general') {
   f.downloadDir.value = current.downloadDir;
   f.duplicates.value = current.duplicates ?? 'ask';
   fillTypeFolders();
+  await fillTypeExtensions();
   f.categoryFolders.checked = current.categoryFolders;
   syncTypePlaceholders();
   f.askForBrowserDownloads.checked = current.askForBrowserDownloads;
@@ -571,6 +616,7 @@ function readSettings() {
     ...current,
     downloadDir: f.downloadDir.value.trim(),
     duplicates: f.duplicates.value,
+    categoryExtensions: readTypeExtensions(),
     categoryDirs: Object.fromEntries([...document.querySelectorAll('#type-folders input')]
       .map((i) => [i.dataset.category, i.value.trim()]).filter(([, v]) => v)),
     categoryFolders: f.categoryFolders.checked,
@@ -618,7 +664,25 @@ async function saveSettings() {
 
 // ---------------------------------------------------------------- wiring
 
+/** Marks dialogs whose content is taller than the window (they show dividers). */
+function watchDialogScrolling() {
+  const check = (form) => form.classList.toggle('scrolls', form.scrollHeight > form.clientHeight + 1);
+  const ro = new ResizeObserver((entries) => {
+    for (const e of entries) {
+      const form = e.target.closest('.dialog');
+      if (form) check(form);
+    }
+  });
+  for (const form of document.querySelectorAll('dialog > .dialog')) {
+    ro.observe(form);
+    for (const child of form.children) ro.observe(child);
+    new MutationObserver(() => check(form)).observe(form, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'open'] });
+  }
+  addEventListener('resize', () => document.querySelectorAll('dialog[open] > .dialog').forEach(check));
+}
+
 export function initDialogs() {
+  watchDialogScrolling();
   // Add
   $('add-check').addEventListener('click', check);
   $('add-url').addEventListener('change', check);

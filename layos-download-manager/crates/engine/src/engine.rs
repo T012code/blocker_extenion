@@ -49,6 +49,8 @@ pub struct EngineConfig {
     pub offline_retries: u32,
     /// Folders chosen for some categories instead of `<download_dir>/<Category>`.
     pub category_dirs: HashMap<Category, PathBuf>,
+    /// The user's own file-extension lists for some categories (instead of the built-in).
+    pub category_extensions: HashMap<Category, Vec<String>>,
     /// Bytes per second across all downloads, 0 = unlimited.
     pub global_speed_limit: u64,
     pub progress_interval: Duration,
@@ -66,9 +68,15 @@ impl EngineConfig {
             retry_delay: Duration::from_secs(1),
             offline_retries: 3,
             category_dirs: HashMap::new(),
+            category_extensions: HashMap::new(),
             global_speed_limit: 0,
             progress_interval: Duration::from_millis(500),
         }
+    }
+
+    /// Which category a file belongs to, by its extension and the user's lists.
+    pub fn category_of(&self, file_name: &str) -> Category {
+        Category::from_file_name_with(file_name, &self.category_extensions)
     }
 
     /// Where a category's files go: the folder chosen for it, else its sub-folder of the
@@ -272,7 +280,7 @@ impl Engine {
             }
             DownloadKind::Media(_) => Category::Video,
             DownloadKind::Torrent(_) => Category::Torrents,
-            _ => Category::from_file_name(&file_name),
+            _ => config.category_of(&file_name),
         };
         let (save_dir, dir_locked) = match new.save_dir {
             Some(d) => (d, true),
@@ -517,7 +525,7 @@ impl Engine {
                 d.save_dir_locked = true;
             }
             if let Some(name) = name {
-                d.category = Category::from_file_name(&name);
+                d.category = self.config().category_of(&name);
                 d.file_name = name;
                 d.file_name_locked = true;
             }
@@ -696,7 +704,7 @@ async fn drive(
     d.content_type = probe.content_type.clone();
     if d.temp_path.is_none() && !d.file_name_locked {
         d.file_name = probe.file_name.clone();
-        d.category = Category::from_file_name(&d.file_name);
+        d.category = config.category_of(&d.file_name);
         if !d.save_dir_locked {
             d.save_dir = config.dir_for(d.category);
         }

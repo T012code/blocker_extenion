@@ -154,7 +154,7 @@ window.__ldmCalls = [];
 export async function invoke(cmd, args) {
   await new Promise((r) => setTimeout(r, 30));
   switch (cmd) {
-    case 'app_info': return { version: '0.1.0', ytdlp: true, ffmpeg: true, maxConnections: 64, sectionPresets: [1, 2, 4, 8, 16, 24, 32, 48, 64] };
+    case 'app_info': return { version: '0.2.0', ytdlp: true, ffmpeg: true, maxConnections: 64, sectionPresets: [1, 2, 4, 8, 16, 24, 32, 48, 64] };
     case 'list': return [...downloads.values()].map((d) => ({ ...d, live: undefined }));
     case 'add': {
       const a = args.args;
@@ -240,6 +240,13 @@ export async function invoke(cmd, args) {
     case 'set_queue':
       for (const id of args.ids) { const d = downloads.get(id); if (d) update(d, { queueId: args.queueId }); }
       return null;
+    case 'category_defaults': return {
+      video: ['mp4', 'm4v', 'mkv', 'webm', 'avi', 'mov', 'wmv', 'flv', 'mpg', 'mpeg', '3gp', 'ts'],
+      music: ['mp3', 'm4a', 'aac', 'flac', 'wav', 'ogg', 'opus', 'wma'],
+      documents: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'epub'],
+      compressed: ['zip', 'rar', '7z', 'tar', 'gz', 'iso', 'img', 'dmg'],
+      programs: ['exe', 'msi', 'msix', 'apk', 'jar', 'deb', 'rpm'],
+    };
     case 'get_settings': return structuredClone(settings);
     case 'save_settings': settings = structuredClone(args.settings); return null;
     case 'network_adapters': return ['Ethernet', 'Wi-Fi', 'Mullvad', 'NordLynx'];

@@ -359,6 +359,18 @@ try {
   await tab.close();
   await rel.close();
 
+  // ---- Part 3c: right-click "Download with LDM" on a link and on an image.
+  const tabId = await worker.evaluate(async () => (await chrome.tabs.query({}))[0]?.id ?? 0);
+  await worker.evaluate(({ url, pageUrl, tabId }) => globalThis.__ldmMenuClick({ menuItemId: 'ldm-link', linkUrl: url, pageUrl, linkText: 'manual' }, { id: tabId, incognito: false }),
+    { url: `${base}/files/manual.zip`, pageUrl: `${base}/`, tabId });
+  assert.ok(await waitFor(saved('Compressed/manual.zip'), files['/files/manual.zip']), '"Download with LDM" on a link should download it');
+  // An image (no link around it): its own address. Here the file was downloaded before,
+  // and the headless app (no window to ask in) saves a numbered copy.
+  await worker.evaluate(({ url, pageUrl, tabId }) => globalThis.__ldmMenuClick({ menuItemId: 'ldm-link', srcUrl: url, pageUrl, mediaType: 'image' }, { id: tabId, incognito: false }),
+    { url: `${base}/files/slow.zip`, pageUrl: `${base}/`, tabId });
+  assert.ok(await waitFor(saved('Compressed/slow (1).zip'), files['/files/slow.zip']), '"Download with LDM" on an image should download it');
+  console.log('ok - right-click "Download with LDM" downloads links and images, with the site\'s cookies');
+
   // ---- Part 4: the Download button on videos, and magnet links.
   if (haveMedia) {
     const vp = await managed.newPage();

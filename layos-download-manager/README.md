@@ -93,7 +93,7 @@ The one exception is a file from a server that can't continue a download (it doe
 
 ### Folders for each type of file
 
-Like IDM, downloads are sorted into folders inside the download folder: **Video, Music, Documents, Compressed, Programs, Torrents and General**. The folders are created when the app starts (and when you change the settings) if they aren't there yet; folders that already exist are used as they are, files included. In Settings → Downloads each type can have a folder of its own anywhere (× goes back to the default), and any single download can still be saved anywhere from the Add window. Turning sorting off saves everything straight into the download folder.
+Like IDM, downloads are sorted into folders inside the download folder: **Video, Music, Documents, Compressed, Programs, Torrents and General**. The folders are created when the app starts (and when you change the settings) if they aren't there yet; folders that already exist are used as they are, files included. Which extensions belong to which type can be changed too: Settings → Downloads → **File types** lists each type's extensions (for example `exe msi msix apk …` for Programs); edit them, separated by spaces, to move an extension to another type or add new ones (put `iso` under Programs and disk images go there), and **Reset** brings back the built-in list. Anything not in a list goes to General; torrents always go to Torrents. The change applies to downloads added from then on. (Which file types the browser extension takes over from the browser is a separate list, in the extension's own settings.) In Settings → Downloads each type can also have a folder of its own anywhere (× goes back to the default), and any single download can still be saved anywhere from the Add window. Turning sorting off saves everything straight into the download folder.
 
 ### Downloads start straight away
 
@@ -176,7 +176,11 @@ The browser extension (in [`extension/`](extension/)) watches downloads in Chrom
 - sites on your skip list
 - form submissions and `blob:`/`data:` downloads, which no other program can repeat
 
-If the app can't be reached, the browser gets the download back and nothing is lost. The extension also adds right-click menu items: **Download with Layó's DM**, **Download this video/audio**, and **Download all links**.
+If the app can't be reached, the browser gets the download back and nothing is lost. The extension also adds items to the browser's right-click menu, as IDM does:
+
+- **Download with LDM** on a link or an image: sends it to the download manager at once (with the site's cookies, so downloads behind a login work), into its type's folder, with its own download window.
+- **Download this video/audio with LDM** on a player: a plain video file downloads directly; a video streamed in pieces (YouTube and most social sites) goes through the video grabber, in the best quality.
+- **Download all links with LDM** on a page, or on a selection: lists the files linked there (of the types in the extension's settings) to tick before downloading.
 
 ```
 browser extension ──Native Messaging──▶ ldm-native-host ──named pipe──▶ download manager ──▶ engine

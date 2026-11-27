@@ -208,6 +208,7 @@ fn main() {
             commands::window_title,
             commands::show_app,
             commands::exit_app,
+            commands::category_defaults,
             commands::start_background,
             commands::confirm_download,
             commands::discard_download,

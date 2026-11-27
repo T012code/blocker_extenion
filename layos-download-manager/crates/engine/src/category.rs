@@ -87,6 +87,59 @@ impl Category {
         }
     }
 
+    /// The categories sorted by file extension, in the order they're checked.
+    pub const BY_EXTENSION: [Category; 5] = [
+        Self::Video,
+        Self::Music,
+        Self::Compressed,
+        Self::Documents,
+        Self::Programs,
+    ];
+
+    /// The extensions that belong here unless the user changed the list.
+    pub fn default_extensions(self) -> &'static [&'static str] {
+        match self {
+            Self::Video => VIDEO,
+            Self::Music => MUSIC,
+            Self::Compressed => COMPRESSED,
+            Self::Documents => DOCUMENTS,
+            Self::Programs => PROGRAMS,
+            Self::General | Self::Torrents => &[],
+        }
+    }
+
+    /// Like `from_file_name`, but with the user's own lists for some categories. An
+    /// extension the user put in a category always goes there; the rest follow the
+    /// built-in lists (minus what the user took out of an edited category).
+    pub fn from_file_name_with(
+        name: &str,
+        lists: &std::collections::HashMap<Category, Vec<String>>,
+    ) -> Self {
+        let ext = Path::new(name)
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_ascii_lowercase())
+            .unwrap_or_default();
+        if ext.is_empty() {
+            return Self::General;
+        }
+        for c in Self::BY_EXTENSION {
+            if let Some(list) = lists.get(&c)
+                && list
+                    .iter()
+                    .any(|e| e.trim_start_matches('.').eq_ignore_ascii_case(&ext))
+            {
+                return c;
+            }
+        }
+        for c in Self::BY_EXTENSION {
+            if !lists.contains_key(&c) && c.default_extensions().contains(&ext.as_str()) {
+                return c;
+            }
+        }
+        Self::General
+    }
+
     /// The sub-folder of the main download folder used by default.
     pub fn folder_name(self) -> &'static str {
         match self {
@@ -113,5 +166,41 @@ mod tests {
         assert_eq!(Category::from_file_name("a.tar.gz"), Category::Compressed);
         assert_eq!(Category::from_file_name("report.pdf"), Category::Documents);
         assert_eq!(Category::from_file_name("noextension"), Category::General);
+    }
+
+    #[test]
+    fn the_users_lists_win() {
+        let mut lists = std::collections::HashMap::new();
+        // Disk images moved from Compressed to Programs; .xyz added to Video.
+        lists.insert(Category::Programs, vec!["exe".into(), "iso".into()]);
+        lists.insert(Category::Video, vec!["mp4".into(), ".XYZ".into()]);
+        let of = |n: &str| Category::from_file_name_with(n, &lists);
+        assert_eq!(of("ubuntu.iso"), Category::Programs);
+        assert_eq!(of("clip.xyz"), Category::Video);
+        assert_eq!(
+            of("film.mkv"),
+            Category::General,
+            "taken out of the edited Video list"
+        );
+        assert_eq!(
+            of("setup.msi"),
+            Category::General,
+            "Programs is now just exe and iso"
+        );
+        assert_eq!(
+            of("song.mp3"),
+            Category::Music,
+            "untouched lists keep their defaults"
+        );
+        assert_eq!(of("a.zip"), Category::Compressed);
+        assert_eq!(of("noext"), Category::General);
+        // No lists: same as the built-in sorting.
+        let none = std::collections::HashMap::new();
+        for n in ["a.mkv", "b.flac", "c.7z", "d.pdf", "e.exe", "f.bin"] {
+            assert_eq!(
+                Category::from_file_name_with(n, &none),
+                Category::from_file_name(n)
+            );
+        }
     }
 }

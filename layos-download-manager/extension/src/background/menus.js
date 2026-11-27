@@ -1,4 +1,6 @@
-// Right-click menu: download a link, all links on a page, or a video/audio element.
+// Right-click menu, as in IDM: "Download with LDM" on links and images, "Download this
+// video/audio with LDM" on players (streamed ones go through the video grabber), and
+// "Download all links with LDM" on pages and selections.
 
 import { api } from '../shared/api.js';
 import { getSettings } from '../shared/settings.js';
@@ -6,12 +8,13 @@ import { baseName, pickLinks } from './rules.js';
 import { askFlag, describe } from './capture.js';
 import * as native from './native.js';
 import { addHistory } from './history.js';
+import * as media from './media.js';
 
-const TITLE = 'Layó\'s DM';
+const TITLE = 'LDM';
 
 export function create() {
   api.contextMenus.removeAll(() => {
-    api.contextMenus.create({ id: 'ldm-link', title: `Download with ${TITLE}`, contexts: ['link'] });
+    api.contextMenus.create({ id: 'ldm-link', title: `Download with ${TITLE}`, contexts: ['link', 'image'] });
     api.contextMenus.create({ id: 'ldm-media', title: `Download this video/audio with ${TITLE}`, contexts: ['video', 'audio'] });
     api.contextMenus.create({ id: 'ldm-all', title: `Download all links with ${TITLE}`, contexts: ['page', 'selection'] });
   });
@@ -44,8 +47,13 @@ async function onClicked(info, tab) {
   const settings = await getSettings();
   const incognito = !!tab?.incognito;
   if (info.menuItemId === 'ldm-link') {
+    // A link, or an image (a linked image downloads what the link points to).
+    const url = info.linkUrl || info.srcUrl;
+    if (!/^(https?:|magnet:)/i.test(url ?? '')) {
+      return notify('Can\'t download this one', 'Only web links (and magnet links) can be downloaded.');
+    }
     const item = await describe({
-      url: info.linkUrl, referrer: info.pageUrl, incognito, pageUrl: info.pageUrl,
+      url, referrer: info.pageUrl, incognito, pageUrl: info.pageUrl,
       description: info.linkText || info.selectionText,
     });
     return sendItems([item], 'link', settings);
@@ -53,8 +61,18 @@ async function onClicked(info, tab) {
   if (info.menuItemId === 'ldm-media') {
     const url = info.srcUrl;
     if (!/^https?:/i.test(url ?? '')) {
-      return notify('Can\'t download this one directly',
-        'This video is streamed in pieces. The video grabber in Layó\'s Download Manager will handle streams like this.');
+      // Streamed in pieces (blob: or MSE): the video grabber (yt-dlp) fetches it from
+      // the page, in the best quality.
+      try {
+        await media.download({
+          action: { type: 'media', pageUrl: info.pageUrl, label: 'Best quality' },
+          title: tab?.title ?? '', pageUrl: info.pageUrl, incognito,
+        });
+      } catch (e) {
+        native.markStale();
+        notify('Layó\'s Download Manager', `Couldn't send the video: ${e.message ?? e}`);
+      }
+      return;
     }
     const item = await describe({ url, referrer: info.pageUrl, incognito, pageUrl: info.pageUrl });
     return sendItems([item], 'media', settings);
@@ -86,4 +104,6 @@ export function start() {
   api.contextMenus.onClicked.addListener((info, tab) => {
     onClicked(info, tab);
   });
+  // For the end-to-end tests: a browser can't be made to click its own menu.
+  globalThis.__ldmMenuClick = onClicked;
 }

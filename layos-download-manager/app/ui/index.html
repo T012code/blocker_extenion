@@ -54,7 +54,7 @@
           <button class="btn" id="btn-pause" disabled title="Pause (Ctrl+P)"><i data-icon="pause"></i><span class="label">Pause</span></button>
           <button class="btn" id="btn-delete" disabled title="Remove from list (Delete)"><i data-icon="trash"></i><span class="label">Remove</span></button>
         </div>
-        <button class="btn subtle" id="btn-more" aria-haspopup="menu" aria-expanded="false">
+        <button class="btn subtle" id="btn-more" aria-haspopup="menu" aria-expanded="false" title="All downloads: continue or pause all, grab files from a site, remove finished">
           <span class="label">All downloads</span><i data-icon="chevron-down" class="chev"></i>
         </button>
         <div class="spacer"></div>
@@ -437,6 +437,11 @@
           </label>
           <label class="check"><input type="checkbox" name="categoryFolders"><span>Sort into a folder for each type of file<small>Video, Music, Documents, Compressed, Programs, Torrents and General, inside the download folder. Folders that are already there are used as they are; missing ones are created.</small></span></label>
           <div class="type-folders" id="type-folders" role="group" aria-label="Folder for each type of file"></div>
+          <div class="field">
+            <span>File types</span>
+            <small>Which extensions belong to each type, separated by spaces. Anything not listed goes to General; torrents always go to Torrents. Moving an extension to another type is enough: the type you put it in wins.</small>
+            <div class="type-exts" id="type-exts" role="group" aria-label="File extensions of each type"></div>
+          </div>
           <label class="field"><span>When a link was downloaded before</span>
             <select name="duplicates">
               <option value="ask">Ask me what to do</option>

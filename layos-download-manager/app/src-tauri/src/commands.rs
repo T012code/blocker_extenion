@@ -506,6 +506,15 @@ pub async fn exit_app(app: tauri::AppHandle) {
     crate::exit(&app).await;
 }
 
+/// The built-in file-extension list of each type, for Settings (to show and reset).
+#[tauri::command]
+pub fn category_defaults() -> std::collections::BTreeMap<ldm_engine::Category, Vec<&'static str>> {
+    ldm_engine::Category::BY_EXTENSION
+        .iter()
+        .map(|c| (*c, c.default_extensions().to_vec()))
+        .collect()
+}
+
 // ---------- downloads that start before you confirm them (as in IDM)
 
 /// The "add download" window checked a link: start it in the background, unconfirmed,

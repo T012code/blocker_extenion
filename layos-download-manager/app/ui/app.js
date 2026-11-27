@@ -340,9 +340,11 @@ function closeMenus() {
 function openMenu(menu, x, y) {
   closeMenus();
   menu.hidden = false;
-  const r = menu.getBoundingClientRect();
-  menu.style.left = `${Math.max(8, Math.min(x, innerWidth - r.width - 8))}px`;
-  menu.style.top = `${Math.max(8, Math.min(y, innerHeight - r.height - 8))}px`;
+  // Its real size (the opening animation scales it a little).
+  const w = menu.offsetWidth;
+  const h = menu.offsetHeight;
+  menu.style.left = `${Math.max(8, Math.min(x, innerWidth - w - 8))}px`;
+  menu.style.top = `${Math.max(8, Math.min(y, innerHeight - h - 8))}px`;
   menu.querySelector('button:not(:disabled)')?.focus();
 }
 

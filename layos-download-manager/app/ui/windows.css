@@ -1,6 +1,6 @@
 /* The small windows: a download's own window and the mini window. Built on styles.css. */
 html:has(body.small-window), body.small-window { height: auto; min-height: 0; }
-body.small-window { background: var(--card); overflow: hidden; }
+body.small-window { background: var(--card); overflow-x: hidden; overflow-y: auto; }
 .win { display: grid; }
 
 /* ---------- a download's window */

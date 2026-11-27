@@ -659,6 +659,92 @@ async function layoutAndWindowTests() {
   console.log('ok - 155 downloads scroll smoothly to the last one, the header stays put, rows update in place');
   await long.close();
 
+  // Everything that can be taller than the window scrolls, at the smallest window size:
+  // dialogs scroll their middle and keep their buttons in view; menus scroll; lists scroll.
+  const small = await browser.newPage({ viewport: { width: 880, height: 540 } });
+  small.on('pageerror', (e) => errors.push(e.message));
+  await small.goto(url);
+  await small.locator('#rows tr').first().waitFor();
+  const scrollCheck = (name) => small.evaluate(async (name) => {
+    const d = [...document.querySelectorAll('dialog[open]')].pop();
+    const form = d.querySelector('.dialog');
+    const vis = (el) => { const r = el.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight && r.height > 0; };
+    const fits = d.getBoundingClientRect().bottom <= innerHeight && d.getBoundingClientRect().top >= 0;
+    const buttons = [...form.querySelectorAll(':scope > .actions .btn')].filter((b) => b.offsetParent).every(vis);
+    form.scrollTop = form.scrollHeight;
+    await new Promise((r) => requestAnimationFrame(r));
+    // The last thing in the dialog body can be scrolled into view, above the buttons.
+    const body = [...form.children].filter((c) => !c.matches('.actions, h2, .dialog-head') && c.offsetParent && c.getBoundingClientRect().height > 0);
+    const last = body.at(-1);
+    const actions = form.querySelector(':scope > .actions');
+    const lastVisible = !last || last.getBoundingClientRect().bottom <= (actions?.getBoundingClientRect().top ?? innerHeight) + 1;
+    form.scrollTop = 0;
+    return { name, fits, buttons, lastVisible };
+  }, name);
+  const dialogs = [
+    ['settings: general', async () => { await small.click('#btn-settings'); await small.locator('#dlg-settings[open]').waitFor(); }],
+    ['settings: downloads', async () => { await small.click('#btn-settings'); await small.locator('#dlg-settings[open]').waitFor(); await small.click('.tab[data-tab="connection"]'); }],
+    ['settings: privacy', async () => { await small.click('#btn-settings'); await small.locator('#dlg-settings[open]').waitFor(); await small.click('.tab[data-tab="privacy"]'); }],
+    ['add: video formats', async () => { await small.click('#btn-add'); await small.fill('#add-url', 'https://video.example.com/watch?v=x'); await small.click('#add-check'); await small.locator('#add-formats:not([hidden])').waitFor(); }],
+    ['browser: 30 links', async () => { await small.evaluate(() => window.__ldmBrowserDownload(Array.from({ length: 30 }, (_, i) => ({ url: `https://x.example/f${i}.zip` })), 'allLinks')); await small.locator('#dlg-browser[open]').waitFor(); }],
+    ['grab', async () => { await small.click('#btn-more'); await small.click('#btn-grab'); }],
+  ];
+  for (const [name, open] of dialogs) {
+    await open();
+    await small.waitForTimeout(350);
+    assert.deepEqual(await scrollCheck(name), { name, fits: true, buttons: true, lastVisible: true });
+    await small.keyboard.press('Escape');
+    await small.locator('dialog[open]').waitFor({ state: 'detached' });
+  }
+  // The settings sections can be reached by scrolling, and the type lists are there.
+  await small.click('#btn-settings');
+  await small.locator('#dlg-settings[open]').waitFor();
+  await small.click('.tab[data-tab="connection"]');
+  await small.locator('#exts-programs').scrollIntoViewIfNeeded();
+  assert.ok(await small.locator('#exts-programs').isVisible());
+  await small.keyboard.press('Escape');
+  // A long right-click menu scrolls and stays inside the window.
+  await small.evaluate(async () => { const bk = await import('./backend.js'); for (let i = 1; i <= 14; i++) await bk.invoke('queue_create', { name: `Queue ${i}`, maxActive: 2 }); });
+  await small.waitForTimeout(200);
+  await small.locator('#rows tr').first().click({ button: 'right' });
+  await small.locator('#menu-row:not([hidden])').waitFor();
+  await small.waitForTimeout(250);
+  const menu = await small.evaluate(() => { const m = document.getElementById('menu-row'); const r = m.getBoundingClientRect(); m.scrollTop = m.scrollHeight; const last = m.lastElementChild.getBoundingClientRect(); return { inside: r.top >= 0 && r.bottom <= innerHeight, scrolls: m.scrollHeight > m.clientHeight, lastReachable: last.bottom <= r.bottom + 1 }; });
+  assert.deepEqual(menu, { inside: true, scrolls: true, lastReachable: true });
+  await small.keyboard.press('Escape');
+  // The side bar (with many queues) and the details panel scroll.
+  assert.ok(await small.evaluate(() => { const n = document.getElementById('nav'); n.scrollTop = n.scrollHeight; return n.scrollTop > 0; }), 'side bar scrolls');
+  await small.locator('#rows tr').first().click();
+  assert.ok(await small.evaluate(() => { const b = document.getElementById('details-body'); b.scrollTop = b.scrollHeight; return b.scrollTop > 0; }), 'details scroll');
+  await small.close();
+  console.log(`ok - at the smallest window size every dialog, menu and panel that's taller than the window scrolls, with its buttons in view (${dialogs.length} dialogs)`);
+
+  // File types: each type's extensions can be edited; only changed lists are saved.
+  const ft = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  await ft.goto(url);
+  await ft.locator('#rows tr').first().waitFor();
+  await ft.click('#btn-settings');
+  await ft.locator('#dlg-settings[open]').waitFor();
+  await ft.click('.tab[data-tab="connection"]');
+  assert.equal(await ft.locator('#type-exts textarea').count(), 5);
+  assert.match(await ft.inputValue('#exts-compressed'), /\biso\b/);
+  await ft.fill('#exts-compressed', 'zip rar 7z tar gz img dmg');
+  await ft.fill('#exts-programs', 'exe msi msix apk jar deb rpm .ISO');
+  await ft.locator('#exts-programs').scrollIntoViewIfNeeded();
+  if (shots) await ft.screenshot({ path: join(shots, 'app-settings-file-types.png') });
+  await ft.click('#settings-save');
+  const s3 = await ft.evaluate(() => import('./backend.js').then((b) => b.invoke('get_settings')));
+  assert.deepEqual(s3.categoryExtensions, { compressed: ['zip', 'rar', '7z', 'tar', 'gz', 'img', 'dmg'], programs: ['exe', 'msi', 'msix', 'apk', 'jar', 'deb', 'rpm', 'iso'] });
+  await ft.click('#btn-settings');
+  await ft.locator('#dlg-settings[open]').waitFor();
+  await ft.click('.tab[data-tab="connection"]');
+  await ft.locator('#type-exts .type-ext', { hasText: 'Programs' }).getByRole('button', { name: 'Reset' }).click();
+  await ft.click('#settings-save');
+  const s4 = await ft.evaluate(() => import('./backend.js').then((b) => b.invoke('get_settings')));
+  assert.deepEqual(Object.keys(s4.categoryExtensions), ['compressed'], 'a list put back to the built-in one is not saved');
+  await ft.close();
+  console.log('ok - the file extensions of each type can be edited (e.g. .iso moved to Programs) and reset');
+
   // A download's window: live progress, one-line form, Pause; and the "done" form.
   const pw = await browser.newPage({ viewport: { width: 460, height: 360 } });
   pw.on('pageerror', (e) => errors.push(e.message));
