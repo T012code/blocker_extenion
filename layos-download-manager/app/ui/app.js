@@ -1,7 +1,7 @@
 // The main window: download list, categories, details with the live section map, and
 // the toolbar. Dialogs are in dialogs.js.
 
-import { invoke, listen } from './backend.js';
+import { invoke, listen, replay } from './backend.js';
 import { action, bytes, eta, percent, speed } from './format.js';
 import { initDialogs, openAdd, openRefresh, openDeleteQueue, openGrab, openQueue, openRemove, openSchedule, openSettings } from './dialogs.js';
 import { hydrateIcons, icon } from './icons.js';
@@ -641,6 +641,9 @@ async function start() {
   await listen('engine', onEngine);
   await listen('queues', (list) => { queues = list; render(); });
   render();
+  // What came in while this window was closed to the tray (a browser's downloads, a
+  // link to refresh, a shutdown about to happen): handled now that it's open.
+  for (const [event, payload] of (await invoke('main_ready').catch(() => [])) ?? []) replay(event, payload);
 }
 
 start();

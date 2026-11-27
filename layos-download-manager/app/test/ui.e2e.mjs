@@ -661,6 +661,20 @@ async function layoutAndWindowTests() {
   }
   console.log('ok - the credit and the column borders have no tooltip');
 
+  // The main window doesn't exist while the app is in the tray (to save memory). What the
+  // browser sends meanwhile waits, and shows as soon as the window opens.
+  {
+    const fresh = await page.context().browser().newPage({ viewport: { width: 1280, height: 800 } });
+    await fresh.addInitScript(() => {
+      window.__ldmInbox = [['browser-download', { items: [{ url: 'https://cdn.example.com/waited.zip' }, { url: 'https://cdn.example.com/waited2.zip' }], source: 'capture', ids: [null, null] }]];
+    });
+    await fresh.goto(`${base}index.html?mock`);
+    await fresh.locator('#dlg-browser[open]').waitFor({ timeout: 5000 });
+    assert.match(await fresh.innerText('#browser-items'), /waited\.zip/);
+    await fresh.close();
+  }
+  console.log('ok - downloads sent while the window was closed to the tray show when it opens');
+
   // The folder field: automatic by default, Choose… picks a folder, × goes back.
   await page.click('#btn-add');
   await page.locator('#dlg-add[open]').waitFor();

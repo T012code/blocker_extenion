@@ -1,7 +1,7 @@
 //! What happens when a scheduled queue finishes: quit, sleep or shut down.
 
 use ldm_service::queues::{Queue, WhenDone};
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 use tauri_plugin_notification::NotificationExt;
 
 fn notify(app: &AppHandle, title: &str, body: &str) {
@@ -43,8 +43,7 @@ pub fn queue_finished(app: &AppHandle, queue: &Queue, action: WhenDone) {
                 &format!("\"{name}\" is done. Open Layó's Download Manager to cancel."),
             );
             if shut_down_soon(name).is_ok() {
-                let _ = app.emit("shutdown-pending", name);
-                crate::state::show_window(app);
+                crate::state::to_main(app, "shutdown-pending", name);
             }
         }
     }

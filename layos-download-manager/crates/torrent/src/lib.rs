@@ -28,7 +28,9 @@ use tokio::sync::watch;
 
 pub use librqbit::{CreateTorrentOptions, create_torrent};
 
+mod lazy;
 pub mod privacy;
+pub use lazy::LazyTorrents;
 use privacy::{Plan, Privacy, Protection};
 
 #[derive(Debug, Clone)]

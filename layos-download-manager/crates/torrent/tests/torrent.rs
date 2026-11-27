@@ -14,7 +14,9 @@ use ldm_engine::{
 };
 use ldm_testkit::{Honeypot, Socks5Proxy};
 use ldm_torrent::privacy::{Privacy, PrivacyMode};
-use ldm_torrent::{CreateTorrentOptions, TorrentOptions, TorrentRunner, create_torrent};
+use ldm_torrent::{
+    CreateTorrentOptions, LazyTorrents, TorrentOptions, TorrentRunner, create_torrent,
+};
 use librqbit::limits::LimitsConfig;
 use librqbit::spawn_utils::BlockingSpawner;
 use librqbit::{AddTorrent, AddTorrentOptions, ListenerOptions, Session, SessionOptions};
@@ -187,6 +189,64 @@ async fn downloads_from_a_torrent_file() {
         std::fs::read(d.save_dir.join("ubuntu-mini.iso")).unwrap(),
         content
     );
+}
+
+/// The torrent session (port, DHT, VPN checks) only runs while a torrent does: it opens
+/// with the first one and closes once none has run for a while.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_torrent_session_only_runs_while_torrents_do() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("seed");
+    std::fs::create_dir_all(&src).unwrap();
+    let content = data(1024 * 1024 + 3, 11);
+    std::fs::write(src.join("small.bin"), &content).unwrap();
+    let seeder = seed(&src.join("small.bin"), None).await;
+
+    let engine = Engine::open(EngineConfig::new(dir.path().join("Downloads"))).unwrap();
+    let mut opts = TorrentOptions::new(dir.path().join("ldm-data"));
+    opts.dht = false;
+    opts.upnp = false;
+    opts.seed_ratio = 0.0;
+    opts.extra_peers = vec![seeder.addr];
+    opts.privacy = Privacy {
+        mode: PrivacyMode::Standard,
+        require_protection: false,
+        ..Default::default()
+    };
+    let lazy = LazyTorrents::with_idle(opts, Duration::from_millis(300));
+    engine.set_runner("torrent", lazy.clone());
+    assert!(
+        !lazy.is_running().await,
+        "nothing starts before a torrent does"
+    );
+
+    let id = engine
+        .add(add_magnet(&seeder.hash, "small.bin"))
+        .await
+        .unwrap();
+    wait_status(&engine, id, DownloadStatus::Completed, 60).await;
+    assert_eq!(
+        std::fs::read(engine.get(id).unwrap().save_dir.join("small.bin")).unwrap(),
+        content
+    );
+
+    let end = Instant::now() + Duration::from_secs(10);
+    while lazy.is_running().await {
+        assert!(
+            Instant::now() < end,
+            "the session should close when no torrent runs"
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+
+    // The next torrent opens it again.
+    std::fs::remove_file(engine.get(id).unwrap().save_dir.join("small.bin")).unwrap();
+    engine.remove(id, false).await.unwrap();
+    let again = engine
+        .add(add_magnet(&seeder.hash, "small.bin"))
+        .await
+        .unwrap();
+    wait_status(&engine, again, DownloadStatus::Completed, 60).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

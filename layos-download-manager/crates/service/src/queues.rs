@@ -108,7 +108,11 @@ impl Queues {
         let weak = Arc::downgrade(&me);
         let mut events = me.engine.subscribe();
         tokio::spawn(async move {
-            let mut tick = tokio::time::interval(Duration::from_millis(500));
+            // Schedules are set to the minute; downloads finishing or stopping wake this
+            // straight away through the events. So a check every 15 s is plenty, and the
+            // processor isn't woken twice a second while nothing happens.
+            let mut tick = tokio::time::interval(Duration::from_secs(15));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             loop {
                 tokio::select! {
                     ev = events.recv() => match ev {

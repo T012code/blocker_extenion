@@ -100,6 +100,7 @@ fn main() {
             Some(vec!["--autostart"]),
         ))
         .setup(move |app| {
+            app.manage(state::MainInbox::default());
             let data_dir = app.path().app_local_data_dir()?;
             let downloads = app
                 .path()
@@ -132,13 +133,12 @@ fn main() {
             app.manage(state);
             windows::apply_theme(app.handle(), settings.theme);
             tray::create(app)?;
-            // The main window starts hidden. Started by the browser for a download, or
-            // with Windows: it stays in the tray (only the download's own window shows).
-            // Otherwise it appears now, without a flash of an empty window first.
+            // The main window isn't created until it's needed. Started by the browser for
+            // a download, or with Windows: the app stays in the tray (only the download's
+            // own window shows), using little memory. Otherwise the window opens now.
             let hide = from_browser || (from_startup && settings.start_minimized);
-            if let (false, Some(w)) = (hide, app.get_webview_window("main")) {
-                let _ = w.show();
-                let _ = w.set_focus();
+            if !hide {
+                state::show_window(app.handle());
             }
             Ok(())
         })
@@ -165,18 +165,22 @@ fn main() {
             }
             let state = window.state::<Arc<state::AppState>>();
             match event {
+                // To the tray: the window closes for real (and gives back its memory);
+                // the app carries on with the tray icon. Without the tray: the app exits.
                 WindowEvent::CloseRequested { api, .. } => {
-                    if state.settings.lock().unwrap().close_to_tray {
+                    if !state.settings.lock().unwrap().close_to_tray {
                         api.prevent_close();
-                        let _ = window.hide();
+                        let app = window.app_handle().clone();
+                        tauri::async_runtime::spawn(async move { exit(&app).await });
                     }
                 }
-                // Minimizing hides the window to the tray, if that's the setting.
+                WindowEvent::Destroyed => window.state::<state::MainInbox>().closed(),
+                // Minimizing goes to the tray, if that's the setting.
                 WindowEvent::Resized(_)
                     if state.settings.lock().unwrap().minimize_to_tray
                         && window.is_minimized().unwrap_or(false) =>
                 {
-                    let _ = window.hide();
+                    let _ = window.destroy();
                 }
                 _ => {}
             }
@@ -229,6 +233,7 @@ fn main() {
             commands::window_size,
             commands::window_title,
             commands::show_app,
+            commands::main_ready,
             commands::exit_app,
             commands::category_defaults,
             commands::start_background,
@@ -238,6 +243,16 @@ fn main() {
             commands::get_duplicate,
             commands::resolve_duplicate,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Layó's Download Manager");
+        .build(tauri::generate_context!())
+        .expect("error while running Layó's Download Manager")
+        .run(|_app, event| {
+            // Every window closed (the main one to the tray, the small ones when done):
+            // keep running in the tray. Only Exit (which passes a code) ends the app.
+            if let tauri::RunEvent::ExitRequested {
+                code: None, api, ..
+            } = event
+            {
+                api.prevent_exit();
+            }
+        });
 }

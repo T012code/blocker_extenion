@@ -84,6 +84,22 @@ jobs:
         working-directory: layos-download-manager/app/src-tauri
         run: npx --yes @tauri-apps/cli@2 build
 
+      - name: Check the installer carries the extension
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $setup = Get-ChildItem target/release/bundle/nsis/*_x64-setup.exe | Select-Object -First 1
+          & 7z x -y -oinstaller-check $setup.FullName | Out-Null
+          foreach ($f in 'extensions/chromium/manifest.json', 'extensions/chromium/background/main.js', 'extensions/firefox/layos-download-manager.xpi') {
+            $hit = Get-ChildItem installer-check -Recurse -File | Where-Object { $_.FullName.Replace('\', '/').EndsWith($f) }
+            if (-not $hit) { throw "The installer is missing $f" }
+            "found $f ($($hit[0].Length) bytes)"
+          }
+          $m = Get-ChildItem installer-check -Recurse -Filter manifest.json | Where-Object { $_.FullName -match 'extensions[\\/]chromium[\\/]manifest.json$' } | Select-Object -First 1
+          $json = Get-Content $m.FullName -Raw | ConvertFrom-Json
+          if (-not $json.key) { throw "The packaged extension has no key, so its id wouldn't match the bridge" }
+          "manifest: $($json.name) $($json.version), manifest_version $($json.manifest_version)"
+
       - name: Upload the installer
         uses: actions/upload-artifact@v4
         with:

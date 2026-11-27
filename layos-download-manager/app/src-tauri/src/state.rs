@@ -9,7 +9,7 @@ use ldm_ipc::{BrowserDownload, Source};
 use ldm_media::{MediaRunner, Tools};
 use ldm_service::queues::Queues;
 use ldm_service::{Frontend, Service};
-use ldm_torrent::{TorrentOptions, TorrentRunner};
+use ldm_torrent::{LazyTorrents, TorrentOptions};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -25,7 +25,7 @@ pub struct AppState {
     /// Shared with the browser bridge: show the "add download" window for browser downloads.
     ask: Arc<Mutex<bool>>,
     data_dir: PathBuf,
-    torrents: tokio::sync::Mutex<Option<Arc<TorrentRunner>>>,
+    torrents: Arc<LazyTorrents>,
 }
 
 /// Downloads sent by the browser, for the "add download" window.
@@ -59,8 +59,8 @@ impl Frontend for WindowFrontend {
             return;
         }
         // Several files (or nothing started yet): the app's window lets you pick.
-        show_window(&self.app);
-        let _ = self.app.emit(
+        to_main(
+            &self.app,
             "browser-download",
             BrowserRequest {
                 items: items.to_vec(),
@@ -103,12 +103,65 @@ impl Frontend for WindowFrontend {
     }
 }
 
+/// Shows the main window, opening it again if it was closed to the tray.
+///
+/// In the tray the main window doesn't exist at all: a hidden window would keep its
+/// whole web view (well over 100 MB) in memory. Opening it again takes a moment.
 pub fn show_window(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.unminimize();
         let _ = w.show();
         let _ = w.set_focus();
+        return;
     }
+    let Some(config) = app.config().app.windows.iter().find(|w| w.label == "main") else {
+        return;
+    };
+    let theme = app
+        .try_state::<Arc<AppState>>()
+        .and_then(|s| s.settings.lock().ok().map(|s| s.theme.window()))
+        .flatten();
+    match tauri::WebviewWindowBuilder::from_config(app, config).and_then(|b| b.theme(theme).build())
+    {
+        Ok(w) => {
+            let _ = w.show();
+            let _ = w.set_focus();
+        }
+        Err(e) => tracing::error!("couldn't open the window: {e}"),
+    }
+}
+
+/// Events for the main window. While it's closed (or still loading) they wait here, and
+/// the page picks them up when it's ready (`main_ready`).
+#[derive(Default)]
+pub struct MainInbox(Mutex<(bool, Vec<(String, serde_json::Value)>)>);
+
+impl MainInbox {
+    /// The page is ready: what was waiting for it.
+    pub fn ready(&self) -> Vec<(String, serde_json::Value)> {
+        let mut g = self.0.lock().unwrap();
+        g.0 = true;
+        std::mem::take(&mut g.1)
+    }
+
+    /// The window closed.
+    pub fn closed(&self) {
+        self.0.lock().unwrap().0 = false;
+    }
+}
+
+/// Sends an event to the main window, opening it if needed.
+pub fn to_main(app: &AppHandle, event: &str, payload: impl serde::Serialize) {
+    let value = serde_json::to_value(payload).unwrap_or_default();
+    if let Some(inbox) = app.try_state::<MainInbox>() {
+        let mut g = inbox.0.lock().unwrap();
+        if g.0 && app.get_webview_window("main").is_some() {
+            let _ = app.emit_to("main", event, value);
+        } else {
+            g.1.push((event.to_owned(), value));
+        }
+    }
+    show_window(app);
 }
 
 impl AppState {
@@ -150,8 +203,8 @@ impl AppState {
             tools,
             windows: Default::default(),
             ask,
+            torrents: LazyTorrents::new(TorrentOptions::new(data_dir.join("torrents"))),
             data_dir,
-            torrents: tokio::sync::Mutex::new(None),
         });
         state.start_torrents().await;
         state.forward_events(app.clone());
@@ -192,8 +245,9 @@ impl AppState {
 
     /// Starts (or restarts, after a settings change) torrent support with the current
     /// privacy settings. Torrents that were running are paused and continued.
+    /// Applies the torrent settings. The torrent session itself only opens while a
+    /// torrent runs (see `torrents.rs`); torrents running now restart with the new settings.
     pub async fn start_torrents(&self) {
-        let mut slot = self.torrents.lock().await;
         let running: Vec<i64> = self
             .engine
             .list()
@@ -204,22 +258,14 @@ impl AppState {
         for id in &running {
             let _ = self.engine.pause(*id).await;
         }
-        if let Some(old) = slot.take() {
-            old.shutdown().await;
-        }
         let s = self.settings.lock().unwrap().clone();
         let mut opts = TorrentOptions::new(self.data_dir.join("torrents"));
         opts.privacy = s.privacy.clone();
         opts.seed_ratio = s.seed_ratio;
-        match TorrentRunner::start(opts).await {
-            Ok(runner) => {
-                self.engine.set_runner("torrent", runner.clone());
-                *slot = Some(runner);
-                for id in running {
-                    let _ = self.engine.start(id);
-                }
-            }
-            Err(e) => tracing::error!("torrents unavailable: {e:#}"),
+        self.torrents.reconfigure(opts).await;
+        self.engine.set_runner("torrent", self.torrents.clone());
+        for id in running {
+            let _ = self.engine.start(id);
         }
     }
 
@@ -279,7 +325,14 @@ impl AppState {
             let mut online = true;
             let mut misses = 0u32;
             loop {
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                // Only downloads need to know: with nothing running, look rarely and
+                // skip the adapter check (it wakes the processor and the network stack).
+                let busy = me.engine.running_count() > 0;
+                tokio::time::sleep(std::time::Duration::from_secs(if busy { 2 } else { 5 })).await;
+                if online && !busy && me.engine.running_count() == 0 {
+                    misses = 0;
+                    continue;
+                }
                 let now = crate::network::online();
                 if now {
                     misses = 0;

@@ -9,7 +9,11 @@ export function invoke(cmd, args = {}) {
   return tauri.core.invoke(cmd, args);
 }
 
+const handlers = new Map();
+
 export function listen(event, handler) {
+  if (!handlers.has(event)) handlers.set(event, []);
+  handlers.get(event).push(handler);
   if (mock) return mock.listen(event, handler);
   return tauri.event.listen(event, (e) => handler(e.payload));
 }
@@ -27,4 +31,9 @@ export const isMock = !!mock;
 export function windowLabel() {
   if (mock) return new URLSearchParams(location.search).get('window') ?? 'main';
   return tauri.window.getCurrentWindow().label;
+}
+
+/** Hands an event that waited for this window (while it was closed) to its listeners. */
+export function replay(event, payload) {
+  for (const h of handlers.get(event) ?? []) h(payload);
 }

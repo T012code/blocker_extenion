@@ -102,6 +102,14 @@ The main window doesn't have to be open for any of this. With the app in the tra
 
 Each of these windows can be turned off in Settings → General. The main window opens only when you ask for it (the tray icon, or "Open Layó's Download Manager"), and never flashes on screen when the browser starts the app.
 
+### Light in the background
+
+In the tray, the app is meant to cost next to nothing:
+
+- **No hidden window.** Closing the main window to the tray closes it for real, and gives back its web view's memory (well over 100 MB). Started with Windows or by the browser, the main window isn't created at all. It opens again in a moment from the tray, and anything the browser sent meanwhile is waiting in it. The mini window closes too when nothing is downloading.
+- **Torrents only when torrents run.** The torrent session (its port, the DHT, the VPN or proxy check every second) opens with the first torrent and closes a minute after the last one stops downloading or sharing.
+- **Few wake-ups.** With nothing downloading, the network check skips its work and the queue scheduler looks every 15 seconds (schedules are to the minute). Lists and progress only redraw while a window is visible.
+
 ### When the internet goes away
 
 If the network drops while files are downloading, every running download **pauses and keeps what it has**, with the reason in its status ("Paused: the internet connection was lost"). The app notices in two ways: Windows reports no usable network adapter (checked every 2 seconds), or a download's connections keep failing to connect (three times in a row). Nothing restarts by itself when the network is back: a banner says you're back online, and you continue the downloads (one button continues all of those paused this way). Torrents and video downloads pause the same way.

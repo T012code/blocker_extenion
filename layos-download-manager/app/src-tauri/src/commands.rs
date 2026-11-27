@@ -282,10 +282,9 @@ pub fn cancel_refresh(state: S, id: i64) {
 
 /// A download's window asks the main window to refresh its link.
 #[tauri::command]
-pub fn request_refresh(app: tauri::AppHandle, id: i64) -> R<()> {
-    use tauri::Emitter;
-    crate::state::show_window(&app);
-    app.emit("refresh-request", id).map_err(err)
+pub async fn request_refresh(app: tauri::AppHandle, id: i64) -> R<()> {
+    crate::state::to_main(&app, "refresh-request", id);
+    Ok(())
 }
 
 /// The file on disk (or its folder for a multi-file torrent).
@@ -472,13 +471,21 @@ pub async fn show_mini(app: tauri::AppHandle, state: S<'_>) -> R<()> {
 #[tauri::command]
 pub fn mini_dismiss(state: S, window: tauri::WebviewWindow) -> R<()> {
     state.windows.set_mini_dismissed(true);
-    window.hide().map_err(err)
+    // Closed, not hidden: a hidden window still holds its web view in memory.
+    window.close().map_err(err)
 }
 
-/// The mini window hides itself when nothing is downloading.
+/// The mini window closes itself when nothing is downloading (it opens again with the
+/// next download). Closed, not hidden, so it gives its memory back.
 #[tauri::command]
 pub fn window_hide(window: tauri::WebviewWindow) -> R<()> {
-    window.hide().map_err(err)
+    window.close().map_err(err)
+}
+
+/// The main window's page has loaded: the events that waited for it.
+#[tauri::command]
+pub fn main_ready(inbox: State<'_, crate::state::MainInbox>) -> Vec<(String, serde_json::Value)> {
+    inbox.ready()
 }
 
 #[tauri::command]
@@ -498,8 +505,9 @@ pub fn window_title(window: tauri::WebviewWindow, title: String) -> R<()> {
     window.set_title(&title).map_err(err)
 }
 
+/// Async: on Windows a window can't be created from a synchronous command.
 #[tauri::command]
-pub fn show_app(app: tauri::AppHandle) {
+pub async fn show_app(app: tauri::AppHandle) {
     crate::state::show_window(&app);
 }
 

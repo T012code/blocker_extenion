@@ -253,6 +253,7 @@ export async function invoke(cmd, args) {
       compressed: ['zip', 'rar', '7z', 'tar', 'gz', 'iso', 'img', 'dmg'],
       programs: ['exe', 'msi', 'msix', 'apk', 'jar', 'deb', 'rpm'],
     };
+    case 'main_ready': return (window.__ldmInbox ?? []).splice(0);
     case 'get_settings': return structuredClone(settings);
     case 'extension_status': return structuredClone(window.__ldmBrowsers ?? [
       { browser: 'chrome', name: 'Chrome', found: true, added: false, developerMode: true },
