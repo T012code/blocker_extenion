@@ -212,6 +212,7 @@ fn main() {
             commands::open_download,
             commands::show_in_folder,
             commands::open_portfolio,
+            commands::email_developer,
             commands::extension_status,
             commands::add_extension,
             commands::queues_list,

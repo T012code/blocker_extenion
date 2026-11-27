@@ -375,6 +375,16 @@ pub fn open_portfolio() -> R<()> {
     tauri_plugin_opener::open_url("https://layothedeveloper.com", None::<&str>).map_err(err)
 }
 
+/// The contact address in Settings → About: opens a new email in the usual email app.
+#[tauri::command]
+pub fn email_developer() -> R<()> {
+    tauri_plugin_opener::open_url(
+        "mailto:hello@layothedeveloper.com?subject=Lay%C3%B3%27s%20Download%20Manager",
+        None::<&str>,
+    )
+    .map_err(err)
+}
+
 // ---------------------------------------------------------------- queues
 
 use ldm_service::queues::Queue;

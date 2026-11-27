@@ -675,6 +675,22 @@ async function layoutAndWindowTests() {
   }
   console.log('ok - downloads sent while the window was closed to the tray show when it opens');
 
+  // About: the name, the version, who made it, and how to get in touch. Nothing more.
+  await page.click('#btn-settings');
+  await page.locator('#dlg-settings[open]').waitFor();
+  await page.click('.tab[data-tab="about"]');
+  const about = await page.innerText('[data-panel="about"]');
+  assert.match(about, /Layó's Download Manager/);
+  assert.match(about, /Version 0\.2\.0/);
+  assert.match(about, /Developed by Layó/);
+  assert.match(about, /hello@layothedeveloper\.com/);
+  assert.doesNotMatch(about, /yt-dlp|ffmpeg|installed|missing/i);
+  await page.click('#about-email');
+  await page.waitForFunction(() => window.__ldmCalls.some((c) => c.cmd === 'email_developer'));
+  if (shots) await page.screenshot({ path: join(shots, 'app-settings-about.png') });
+  await page.click('#settings-cancel');
+  console.log('ok - About shows the name, version, developer and contact email only');
+
   // The folder field: automatic by default, Choose… picks a folder, × goes back.
   await page.click('#btn-add');
   await page.locator('#dlg-add[open]').waitFor();

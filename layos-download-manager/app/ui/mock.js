@@ -277,7 +277,8 @@ export async function invoke(cmd, args) {
     case 'network_adapters': return ['Ethernet', 'Wi-Fi', 'Mullvad', 'NordLynx'];
     case 'privacy_status': return protectedNow() ? null : 'Waiting for a VPN or proxy. Set one up in Settings → Privacy, or allow torrents without one.';
     case 'test_proxy': if (/1080/.test(args.url)) return null; throw new Error('no answer');
-    case 'open_download': case 'show_in_folder': case 'open_portfolio': return null;
+    case 'open_download': case 'show_in_folder': return null;
+    case 'open_portfolio': case 'email_developer': window.__ldmCalls.push({ cmd, args: {} }); return null;
     case 'refresh_link': {
       const d = downloads.get(args.id);
       window.__ldmCalls.push({ cmd, args: structuredClone(args) });

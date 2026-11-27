@@ -670,10 +670,6 @@ export async function openSettings(tab = 'general') {
   f.seedRatio.value = current.seedRatio;
   syncModeDetails();
   $('about-version').textContent = `Version ${info.version ?? ''}`;
-  $('about-tools').replaceChildren(
-    Object.assign(document.createElement('li'), { textContent: `Video downloader (yt-dlp): ${info.ytdlp ? 'installed' : 'missing'}` }),
-    Object.assign(document.createElement('li'), { textContent: `Video joiner (ffmpeg): ${info.ffmpeg ? 'installed' : 'missing'}` }),
-  );
   showError($('settings-error'), '');
   showTab(tab);
   refreshPrivacyStatus();
@@ -919,6 +915,7 @@ export function initDialogs() {
   // Back from the browser: show what changed.
   addEventListener('focus', () => { if ($('dlg-settings').open && !document.querySelector('[data-panel="extension"]').hidden) refreshBrowsers(); });
   $('about-credit').addEventListener('click', () => run(invoke('open_portfolio'), 'Couldn\'t open the link'));
+  $('about-email').addEventListener('click', () => run(invoke('email_developer'), 'Couldn\'t open your email app'));
 }
 
 /** "Add to list" or "Add to queue", depending on the queue picked. */
