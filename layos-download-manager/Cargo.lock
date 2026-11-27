@@ -2708,7 +2708,7 @@ dependencies = [
 
 [[package]]
 name = "layos-download-manager"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "if-addrs",
  "ldm-engine",
@@ -2738,7 +2738,7 @@ checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
 
 [[package]]
 name = "ldm-engine"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "futures-util",
  "ldm-testkit",
@@ -2757,7 +2757,7 @@ dependencies = [
 
 [[package]]
 name = "ldm-ipc"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -2768,7 +2768,7 @@ dependencies = [
 
 [[package]]
 name = "ldm-media"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "futures-util",
  "ldm-engine",
@@ -2782,7 +2782,7 @@ dependencies = [
 
 [[package]]
 name = "ldm-native-host"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "ldm-engine",
  "ldm-ipc",
@@ -2798,7 +2798,7 @@ dependencies = [
 
 [[package]]
 name = "ldm-service"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "chrono",
  "ldm-engine",
@@ -2818,7 +2818,7 @@ dependencies = [
 
 [[package]]
 name = "ldm-testkit"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "tokio",
  "tokio-util",
@@ -2826,7 +2826,7 @@ dependencies = [
 
 [[package]]
 name = "ldm-torrent"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "bytes",

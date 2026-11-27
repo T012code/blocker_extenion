@@ -681,7 +681,7 @@ async function layoutAndWindowTests() {
   await page.click('.tab[data-tab="about"]');
   const about = await page.innerText('[data-panel="about"]');
   assert.match(about, /Layó's Download Manager/);
-  assert.match(about, /Version 0\.2\.0/);
+  assert.match(about, /Version 0\.2\.1/);
   assert.match(about, /Developed by Layó/);
   assert.match(about, /hello@layothedeveloper\.com/);
   assert.doesNotMatch(about, /yt-dlp|ffmpeg|installed|missing/i);
