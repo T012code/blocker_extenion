@@ -35,6 +35,7 @@ let settings = {
   openTorrentFiles: true,
   handleTorrentLinks: true,
   seedRatio: 1,
+  theme: 'system',
   privacy: { mode: { type: 'private' }, requireProtection: true, dht: true, blocklist: null },
 };
 
@@ -253,6 +254,24 @@ export async function invoke(cmd, args) {
       programs: ['exe', 'msi', 'msix', 'apk', 'jar', 'deb', 'rpm'],
     };
     case 'get_settings': return structuredClone(settings);
+    case 'extension_status': return structuredClone(window.__ldmBrowsers ?? [
+      { browser: 'chrome', name: 'Chrome', found: true, added: false, developerMode: true },
+      { browser: 'edge', name: 'Edge', found: true, added: true, developerMode: true },
+      { browser: 'brave', name: 'Brave', found: false, added: false, developerMode: null },
+      { browser: 'opera', name: 'Opera', found: true, added: false, developerMode: false },
+      { browser: 'firefox', name: 'Firefox', found: true, added: false, developerMode: null },
+    ]);
+    case 'add_extension': {
+      const b = (window.__ldmBrowsers ?? []).find((x) => x.browser === args.browser);
+      const name = { chrome: 'Chrome', edge: 'Edge', brave: 'Brave', opera: 'Opera', firefox: 'Firefox' }[args.browser];
+      const page = args.browser === 'firefox' ? 'about:addons' : `${args.browser}://extensions`;
+      const step = args.browser === 'firefox' ? 'firefox' : args.browser === 'edge' || b?.added ? 'already'
+        : args.browser === 'opera' ? 'devMode' : 'drop';
+      const path = args.browser === 'firefox'
+        ? 'C:\\Users\\you\\AppData\\Local\\Layó’s Download Manager\\extensions\\firefox\\layos-download-manager.xpi'
+        : 'C:\\Users\\you\\AppData\\Local\\Layó’s Download Manager\\extensions\\chromium';
+      return { browser: args.browser, name, step, path, page };
+    }
     case 'save_settings': settings = structuredClone(args.settings); return null;
     case 'network_adapters': return ['Ethernet', 'Wi-Fi', 'Mullvad', 'NordLynx'];
     case 'privacy_status': return protectedNow() ? null : 'Waiting for a VPN or proxy. Set one up in Settings → Privacy, or allow torrents without one.';

@@ -11,6 +11,20 @@ use tauri::{
 
 use crate::settings::AppSettings;
 
+/// The title bars of all the app's windows follow the chosen theme (the pages
+/// themselves follow it through theme.js).
+pub fn apply_theme(app: &AppHandle, theme: crate::settings::Theme) {
+    for w in app.webview_windows().values() {
+        let _ = w.set_theme(theme.window());
+    }
+}
+
+fn chosen_theme(app: &AppHandle) -> Option<tauri::Theme> {
+    app.try_state::<std::sync::Arc<crate::state::AppState>>()
+        .and_then(|s| s.settings.lock().ok().map(|s| s.theme.window()))
+        .flatten()
+}
+
 /// At most this many download windows open by themselves at once.
 const MAX_AUTO_OPEN: usize = 3;
 const PROGRESS_SIZE: (f64, f64) = (460.0, 356.0);
@@ -151,6 +165,7 @@ pub fn open_download(app: &AppHandle, id: i64, focus: bool) -> tauri::Result<()>
         .center()
         .focused(focus)
         .visible(false)
+        .theme(chosen_theme(app))
         .build()?;
     // Several at once: step each one down and right so none hides another.
     if others > 0
@@ -182,6 +197,7 @@ pub fn show_mini(app: &AppHandle) -> tauri::Result<()> {
         .minimizable(false)
         .focused(false)
         .visible(false)
+        .theme(chosen_theme(app))
         .build()?;
     place_bottom_right(&w);
     w.show()?;

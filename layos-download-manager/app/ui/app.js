@@ -633,6 +633,8 @@ async function start() {
   initTooltips();
   bind();
   info = { ...info, ...(await run(invoke('app_info'), 'Couldn\'t start')) };
+  // The saved theme, for this window and the small ones (they read it from localStorage).
+  invoke('get_settings').then((s) => window.ldmTheme?.set(s?.theme ?? 'system')).catch(() => {});
   initDialogs();
   for (const d of (await run(invoke('list'), 'Couldn\'t load downloads')) ?? []) if (!d.pending) downloads.set(d.id, d);
   queues = (await run(invoke('queues_list'), 'Couldn\'t load queues')) ?? [];

@@ -53,6 +53,29 @@ pub struct AppSettings {
     /// Share finished torrents until uploaded / size reaches this.
     pub seed_ratio: f32,
     pub privacy: Privacy,
+    /// Light, dark, or whatever Windows uses.
+    pub theme: Theme,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Theme {
+    /// Follow Windows (Settings → Personalization → Colors).
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
+impl Theme {
+    /// For the windows' title bars; `None` follows Windows.
+    pub fn window(self) -> Option<tauri::Theme> {
+        match self {
+            Theme::System => None,
+            Theme::Light => Some(tauri::Theme::Light),
+            Theme::Dark => Some(tauri::Theme::Dark),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -106,6 +129,7 @@ impl Default for AppSettings {
             handle_torrent_links: true,
             seed_ratio: 1.0,
             privacy: Privacy::default(),
+            theme: Theme::System,
         }
     }
 }

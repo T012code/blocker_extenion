@@ -314,6 +314,9 @@ pub async fn save_settings(app: tauri::AppHandle, state: S<'_>, settings: AppSet
     if old.launch_on_startup != settings.launch_on_startup {
         crate::apply_autostart(&app, settings.launch_on_startup);
     }
+    if old.theme != settings.theme {
+        crate::windows::apply_theme(&app, settings.theme);
+    }
     let restart = old.privacy != settings.privacy || old.seed_ratio != settings.seed_ratio;
     *state.settings.lock().unwrap() = settings;
     if restart {
@@ -655,4 +658,31 @@ pub async fn resolve_duplicate(
         *state.settings.lock().unwrap() = s;
     }
     Ok(added)
+}
+
+// ---------------------------------------------------------------- browser extension
+
+/// Which browsers are here, and which have the extension.
+#[tauri::command]
+pub async fn extension_status() -> Vec<crate::extensions::BrowserStatus> {
+    tauri::async_runtime::spawn_blocking(|| {
+        crate::extensions::status(&crate::extensions::Env::current())
+    })
+    .await
+    .unwrap_or_default()
+}
+
+/// Opens the browser to add the extension that came with the app.
+#[tauri::command]
+pub async fn add_extension(
+    app: tauri::AppHandle,
+    browser: crate::extensions::Browser,
+) -> R<crate::extensions::AddResult> {
+    use tauri::Manager;
+    let resources = app.path().resource_dir().map_err(err)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::extensions::add(browser, &resources, &crate::extensions::Env::current())
+    })
+    .await
+    .map_err(err)?
 }

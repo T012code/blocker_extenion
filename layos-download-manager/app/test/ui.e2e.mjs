@@ -584,6 +584,83 @@ async function layoutAndWindowTests() {
   assert.equal(saved2.duplicates, 'existing');
   console.log('ok - each type of file (Video, Music, Documents, Compressed, Programs, Torrents, General) can have its own folder');
 
+  // Theme: shows as soon as it's picked, Cancel puts it back, Save keeps it in every window.
+  const theme = () => page.evaluate(() => document.documentElement.dataset.theme ?? 'system');
+  const paper = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  await page.click('#btn-settings');
+  await page.locator('#dlg-settings[open]').waitFor();
+  await page.selectOption('select[name="theme"]', 'dark');
+  assert.equal(await theme(), 'dark');
+  const darkPaper = await paper();
+  await page.selectOption('select[name="theme"]', 'light');
+  assert.equal(await theme(), 'light');
+  assert.notEqual(await paper(), darkPaper, 'light and dark look different');
+  await page.click('#settings-cancel');
+  await page.waitForFunction(() => !document.documentElement.dataset.theme, null, { timeout: 2000 }).catch(() => {});
+  assert.equal(await theme(), 'system', 'Cancel goes back to the saved theme');
+  await page.click('#btn-settings');
+  await page.locator('#dlg-settings[open]').waitFor();
+  assert.equal(await page.inputValue('select[name="theme"]'), 'system');
+  await page.selectOption('select[name="theme"]', 'dark');
+  await page.click('#settings-save');
+  assert.equal(await theme(), 'dark');
+  assert.equal((await page.evaluate(() => import('./backend.js').then((b) => b.invoke('get_settings')))).theme, 'dark');
+  // The app's windows share localStorage, like pages of one browser profile.
+  const ctx = await page.context().browser().newContext();
+  const [one, two] = [await ctx.newPage(), await ctx.newPage()];
+  await one.goto(`${base}mini.html?mock`);
+  await one.evaluate(() => window.ldmTheme.set('dark'));
+  await two.goto(`${base}progress.html?mock&id=1`);
+  assert.equal(await two.evaluate(() => document.documentElement.dataset.theme), 'dark', 'a window opened later starts in it');
+  await one.evaluate(() => window.ldmTheme.set('light'));
+  await two.waitForFunction(() => document.documentElement.dataset.theme === 'light', null, { timeout: 3000 });
+  await ctx.close();
+  if (shots) {
+    await page.click('#btn-settings');
+    await page.locator('#dlg-settings[open]').waitFor();
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: join(shots, 'app-settings-dark.png') });
+    await page.click('#settings-cancel');
+  }
+  await page.evaluate(() => window.ldmTheme.set('system'));
+  const sTheme = await page.evaluate(() => import('./backend.js').then((b) => b.invoke('get_settings')));
+  await page.evaluate((s) => import('./backend.js').then((b) => b.invoke('save_settings', { settings: { ...s, theme: 'system' } })), sTheme);
+  console.log('ok - the theme (same as Windows, light or dark) shows at once, Cancel undoes it, Save applies it to every window');
+
+  // Browser extension: each browser, whether it has the extension, and what to do next.
+  await page.click('#btn-settings');
+  await page.locator('#dlg-settings[open]').waitFor();
+  await page.click('.tab[data-tab="extension"]');
+  await page.locator('#ext-browsers .browser-btn').first().waitFor();
+  assert.deepEqual(await page.$$eval('#ext-browsers .browser-btn', (b) => b.map((x) => x.innerText.replace(/\s+/g, ' ').trim())),
+    ['Chrome Not added yet', 'Edge Added', 'Brave Not installed', 'Opera Not added yet', 'Firefox Not added yet']);
+  assert.equal(await page.isDisabled('.browser-btn[data-browser="brave"]'), true);
+  await page.click('.browser-btn[data-browser="chrome"]');
+  await page.locator('#ext-steps:not([hidden])', { hasText: 'Drop the folder into Chrome' }).waitFor();
+  assert.match(await page.innerText('#ext-steps code'), /extensions\\chromium$/);
+  const overflow = await page.evaluate(() => { const p = document.querySelector('[data-panel="extension"]'); return p.scrollWidth - p.clientWidth; });
+  assert.ok(overflow <= 1, `the extension tab fits its width (${overflow}px over)`);
+  if (shots) await page.screenshot({ path: join(shots, 'app-settings-extension.png') });
+  await page.click('.browser-btn[data-browser="opera"]');
+  await page.locator('#ext-steps.problem', { hasText: 'Developer mode is off in Opera' }).waitFor();
+  await page.click('.browser-btn[data-browser="edge"]');
+  await page.locator('#ext-steps', { hasText: 'Already in Edge' }).waitFor();
+  await page.click('.browser-btn[data-browser="firefox"]');
+  await page.locator('#ext-steps', { hasText: 'Firefox is asking to add it' }).waitFor();
+  assert.match(await page.innerText('#ext-steps code'), /\.xpi$/);
+  await page.click('#settings-cancel');
+  console.log('ok - Settings adds the extension to Chrome, Edge, Brave, Opera or Firefox, and says when Developer mode is off');
+
+  // No tooltip on the credit or on the column borders.
+  for (const sel of ['#credit', 'th[data-key="size"] .col-resize']) {
+    await page.mouse.move(5, 790);
+    await page.hover(sel);
+    await page.waitForTimeout(900);
+    assert.equal(await page.isHidden('#tooltip'), true, `no tooltip on ${sel}`);
+    assert.equal(await page.getAttribute(sel, 'title'), null);
+  }
+  console.log('ok - the credit and the column borders have no tooltip');
+
   // The folder field: automatic by default, Choose… picks a folder, × goes back.
   await page.click('#btn-add');
   await page.locator('#dlg-add[open]').waitFor();

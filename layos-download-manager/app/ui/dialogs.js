@@ -532,6 +532,78 @@ function showTab(name) {
     t.setAttribute('aria-selected', on ? 'true' : 'false');
   }
   for (const p of document.querySelectorAll('.tabpanel')) p.hidden = p.dataset.panel !== name;
+  if (name === 'extension') refreshBrowsers();
+}
+
+// ---------------------------------------------------------------- browser extension
+
+const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
+
+async function refreshBrowsers() {
+  const list = await invoke('extension_status').catch(() => null);
+  const box = $('ext-browsers');
+  if (!list) { box.replaceChildren(el('p', { className: 'muted', textContent: 'Couldn\'t look for browsers.' })); return; }
+  box.replaceChildren(...list.map((b) => {
+    const note = !b.found ? 'Not installed' : b.added ? 'Added' : 'Not added yet';
+    const btn = el('button', { type: 'button', className: `browser-btn${b.added ? ' added' : ''}`, disabled: !b.found },
+      icon(b.added ? 'check' : 'globe', { size: 20 }), el('strong', { textContent: b.name }), el('small', { textContent: note }));
+    btn.dataset.browser = b.browser;
+    btn.setAttribute('aria-label', `${b.name}: ${note}`);
+    btn.addEventListener('click', () => addExtension(b, btn));
+    return btn;
+  }));
+}
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch { return false; }
+}
+
+function pathRow(path) {
+  const copy = el('button', { type: 'button', className: 'btn small', textContent: 'Copy' });
+  copy.addEventListener('click', async () => { if (await copyText(path)) toast('Copied the folder\'s address'); });
+  return el('div', { className: 'path' }, el('code', { textContent: path, title: path }), copy);
+}
+
+async function addExtension(b, btn) {
+  const steps = $('ext-steps');
+  btn.setAttribute('aria-busy', 'true');
+  let r;
+  try {
+    r = await invoke('add_extension', { browser: b.browser });
+  } catch (e) {
+    steps.className = 'ext-steps problem';
+    steps.replaceChildren(el('h3', { textContent: `Couldn't open ${b.name}` }), el('p', { textContent: String(e?.message ?? e) }));
+    steps.hidden = false;
+    return;
+  } finally {
+    btn.removeAttribute('aria-busy');
+  }
+  const copied = r.step === 'drop' || r.step === 'devMode' ? await copyText(r.path) : false;
+  const page = el('strong', { textContent: r.page });
+  steps.className = `ext-steps${r.step === 'devMode' ? ' problem' : ''}`;
+  if (r.step === 'already') {
+    steps.replaceChildren(el('h3', { textContent: `Already in ${r.name}` }),
+      el('p', { className: 'muted' }, `We opened ${r.name}'s extensions page (`, page, ') so you can check it\'s turned on.'));
+  } else if (r.step === 'devMode') {
+    steps.replaceChildren(el('h3', { textContent: `Developer mode is off in ${r.name}` }),
+      el('p', {}, `${r.name} only adds extensions from outside its store in Developer mode. We opened its extensions page (`, page, `). Turn on Developer mode there, then click ${r.name} here again.`));
+  } else if (r.step === 'drop') {
+    steps.replaceChildren(el('h3', { textContent: `Drop the folder into ${r.name}` }),
+      el('ol', {},
+        el('li', {}, `${r.name}'s extensions page is open, and File Explorer shows the extension's folder, `, el('strong', { textContent: 'chromium' }), '.'),
+        el('li', { textContent: `Drag that folder onto the extensions page in ${r.name}.` }),
+        el('li', { textContent: `Or click Load unpacked in ${r.name} and paste this folder's address${copied ? ' (it\'s copied)' : ''}:` })),
+      pathRow(r.path),
+      el('p', { className: 'muted small', textContent: 'Keep the folder where it is: the browser loads the extension from it.' }));
+  } else {
+    steps.replaceChildren(el('h3', { textContent: 'Firefox is asking to add it' }),
+      el('ol', {},
+        el('li', { textContent: 'Click Add in Firefox.' }),
+        el('li', { textContent: 'If Firefox says the add-on couldn\'t be verified, it only installs add-ons signed by Mozilla. Load it for now from about:debugging → This Firefox → Load Temporary Add-on, and choose this file:' })),
+      pathRow(r.path));
+  }
+  steps.hidden = false;
+  refreshBrowsers();
 }
 
 function modeName(m) {
@@ -566,6 +638,8 @@ export async function openSettings(tab = 'general') {
   current = await run(invoke('get_settings'), 'Couldn\'t read settings');
   if (!current) return;
   const f = form();
+  f.theme.value = current.theme ?? 'system';
+  $('ext-steps').hidden = true;
   f.downloadDir.value = current.downloadDir;
   f.duplicates.value = current.duplicates ?? 'ask';
   fillTypeFolders();
@@ -614,6 +688,7 @@ function readSettings() {
       : { type: mode };
   return {
     ...current,
+    theme: f.theme.value,
     downloadDir: f.downloadDir.value.trim(),
     duplicates: f.duplicates.value,
     categoryExtensions: readTypeExtensions(),
@@ -655,6 +730,8 @@ async function saveSettings() {
   }
   try {
     await invoke('save_settings', { settings: s });
+    current = s;
+    window.ldmTheme?.set(s.theme);
     $('dlg-settings').close();
     toast('Settings saved');
   } catch (e) {
@@ -836,6 +913,11 @@ export function initDialogs() {
   });
   $('settings-form').addEventListener('submit', (e) => { e.preventDefault(); saveSettings(); });
   $('settings-cancel').addEventListener('click', () => $('dlg-settings').close());
+  // The theme shows as soon as it's picked; closing without saving puts it back.
+  form().theme.addEventListener('change', (e) => window.ldmTheme?.apply(e.target.value));
+  $('dlg-settings').addEventListener('close', () => window.ldmTheme?.apply(current?.theme ?? 'system'));
+  // Back from the browser: show what changed.
+  addEventListener('focus', () => { if ($('dlg-settings').open && !document.querySelector('[data-panel="extension"]').hidden) refreshBrowsers(); });
   $('about-credit').addEventListener('click', () => run(invoke('open_portfolio'), 'Couldn\'t open the link'));
 }
 

@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Layó's Download Manager</title>
+  <script src="theme.js"></script>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -37,7 +38,7 @@
           <button class="foot-btn" id="btn-sidebar" type="button" aria-controls="sidebar" aria-expanded="true" title="Hide the side bar (Ctrl+B)"><i data-icon="sidebar-close" class="sb-close"></i><i data-icon="sidebar-open" class="sb-open"></i><span class="label">Hide side bar</span></button>
           <button class="foot-btn" id="btn-exit" type="button" title="Exit Layó's Download Manager (Ctrl+Q). Closing the window only hides it in the tray."><i data-icon="power"></i><span class="label">Exit</span></button>
         </div>
-        <button class="credit" id="credit" type="button" title="Developed by Layó · opens layothedeveloper.com">
+        <button class="credit" id="credit" type="button" aria-label="Developed by Layó (opens layothedeveloper.com)">
           <img class="mark-light" src="brand/layo-mark-light.svg" alt="">
           <img class="mark-dark" src="brand/layo-mark-dark.svg" alt="">
           <span class="label">Developed by <strong>Layó</strong></span>
@@ -405,11 +406,20 @@
         <div class="tabs" role="tablist" aria-orientation="vertical">
           <button type="button" role="tab" class="tab active" data-tab="general" aria-selected="true">General</button>
           <button type="button" role="tab" class="tab" data-tab="connection" aria-selected="false">Downloads</button>
+          <button type="button" role="tab" class="tab" data-tab="extension" aria-selected="false">Browser extension</button>
           <button type="button" role="tab" class="tab" data-tab="privacy" aria-selected="false">Torrents and privacy</button>
           <button type="button" role="tab" class="tab" data-tab="about" aria-selected="false">About</button>
         </div>
 
         <section class="tabpanel" data-panel="general" role="tabpanel">
+          <p class="group-title">Appearance</p>
+          <label class="field narrow-field"><span>Theme</span>
+            <select name="theme">
+              <option value="system">Same as Windows</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </label>
           <p class="group-title">Startup</p>
           <label class="check"><input type="checkbox" name="launchOnStartup"><span>Start when I sign in to Windows</span></label>
           <label class="check indent"><input type="checkbox" name="startMinimized"><span>Start in the tray<small>The window stays closed until you need it.</small></span></label>
@@ -457,6 +467,12 @@
             <div class="row"><input name="globalSpeedLimitKB" type="number" min="0" step="1" aria-describedby="limit-help"><span class="inline muted">KB/s</span></div>
             <small id="limit-help">0 means no limit.</small>
           </label>
+        </section>
+
+        <section class="tabpanel" data-panel="extension" role="tabpanel" hidden>
+          <p class="muted">The extension sends your browser's downloads here, and adds a download button to videos on any site. It came with the app: choose your browser to add it.</p>
+          <div class="browsers" id="ext-browsers" role="group" aria-label="Add the extension to"></div>
+          <div class="ext-steps" id="ext-steps" role="status" aria-live="polite" hidden></div>
         </section>
 
         <section class="tabpanel" data-panel="privacy" role="tabpanel" hidden>

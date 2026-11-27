@@ -1,7 +1,7 @@
 // Builds the extension for each browser family into dist/.
 //   dist/chromium  Chrome, Edge, Opera, Brave, Vivaldi
 //   dist/firefox   Firefox 128+
-// With --zip, also writes store-ready zips next to them.
+// With --zip, also writes store-ready zips next to them, and dist/xpi for the app's installer.
 // With --store, also writes dist/chromium-store without the development "key" (the
 // stores give their own id), for submitting to the Chrome Web Store and Edge Add-ons.
 
@@ -75,6 +75,12 @@ for (const [name, manifest] of builds) {
       execFileSync('zip', ['-qr', '-X', file, '.'], { cwd: out });
     }
     console.log(`wrote ${file}`);
+    if (name === 'firefox') {
+      // The same zip, named as Firefox expects an add-on; the app's installer carries it.
+      mkdirSync(join(dist, 'xpi'), { recursive: true });
+      cpSync(file, join(dist, 'xpi', 'layos-download-manager.xpi'));
+      console.log('wrote dist/xpi/layos-download-manager.xpi');
+    }
   } else {
     console.log(`built ${out}`);
   }

@@ -194,7 +194,7 @@ export class DownloadTable {
       grip.setAttribute('role', 'separator');
       grip.setAttribute('aria-orientation', 'vertical');
       grip.setAttribute('aria-label', `Resize ${c.label} column`);
-      grip.title = `Drag to resize ${c.label.toLowerCase()}; double-click to reset`;
+      grip.setAttribute('aria-description', 'Drag, or use the arrow keys. Double-click to reset.');
       grip.tabIndex = 0;
       grip.addEventListener('pointerdown', (e) => this.startResize(e, c));
       grip.addEventListener('keydown', (e) => {

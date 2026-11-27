@@ -3,6 +3,7 @@
 
 mod associations;
 mod commands;
+mod extensions;
 mod network;
 mod power;
 mod settings;
@@ -129,6 +130,7 @@ fn main() {
                 });
             }
             app.manage(state);
+            windows::apply_theme(app.handle(), settings.theme);
             tray::create(app)?;
             // The main window starts hidden. Started by the browser for a download, or
             // with Windows: it stays in the tray (only the download's own window shows).
@@ -206,6 +208,8 @@ fn main() {
             commands::open_download,
             commands::show_in_folder,
             commands::open_portfolio,
+            commands::extension_status,
+            commands::add_extension,
             commands::queues_list,
             commands::queue_create,
             commands::queue_update,

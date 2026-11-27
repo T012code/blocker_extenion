@@ -25,7 +25,14 @@ Windows may show "Windows protected your PC" the first time, because the install
 
 ### 2. The browser extension
 
-Until the extension is in the browsers' stores, it's added by hand:
+The extension comes with the app: the installer puts it in the app's folder (`extensions\chromium` and `extensions\firefox\layos-download-manager.xpi`). In the app, open **Settings → Browser extension** and click your browser:
+
+- **Chrome, Edge, Brave, Opera:** the app checks Developer mode in that browser (it only reads the browser's settings). If it's off, it says so and opens the extensions page for you to turn it on. If it's on, it opens the extensions page and shows the `chromium` folder in File Explorer: drag the folder onto the page (or click **Load unpacked** and paste the address, which is copied for you).
+- **Firefox:** Firefox opens the .xpi and asks to add it.
+
+Why not a .crx? On Windows, Chrome and Edge refuse a .crx that doesn't come from their own stores (since Chrome 33), and Chrome no longer accepts `--load-extension` (since Chrome 137). Developer mode with the unpacked folder is the one way an extension from outside the stores stays installed. Automatic installs like IDM's need the extension to be published in the Chrome Web Store and Edge Add-ons first.
+
+The same steps by hand, without the app's help:
 
 - **Chrome, Edge, Brave, Opera, Vivaldi:** unzip `layos-download-manager-chromium-x.y.z.zip` into a folder you'll keep (for example `Documents\Layó's Download Manager extension`). Open the browser's extensions page (`chrome://extensions`, `edge://extensions`, `brave://extensions`, `opera://extensions`, `vivaldi:extensions`), turn on **Developer mode**, click **Load unpacked**, and choose that folder. Don't delete the folder afterwards.
 - **Firefox:** Firefox only installs signed extensions permanently. Until it's signed on addons.mozilla.org, open `about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on…** and choose the zip (it stays until Firefox closes). Firefox Developer Edition and Nightly can install it permanently with `xpinstall.signatures.required` set to `false` in `about:config`.
