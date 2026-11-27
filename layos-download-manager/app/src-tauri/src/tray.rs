@@ -16,6 +16,13 @@ pub fn create(app: &App) -> tauri::Result<()> {
         true,
         None::<&str>,
     )?;
+    let mini = MenuItem::with_id(
+        app,
+        "mini",
+        "Show downloads in progress",
+        true,
+        None::<&str>,
+    )?;
     let pause = MenuItem::with_id(app, "pause_all", "Pause all", true, None::<&str>)?;
     let resume = MenuItem::with_id(app, "resume_all", "Continue all", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Exit", true, None::<&str>)?;
@@ -24,6 +31,7 @@ pub fn create(app: &App) -> tauri::Result<()> {
         app,
         &[
             &open,
+            &mini,
             &sep,
             &pause,
             &resume,
@@ -39,6 +47,11 @@ pub fn create(app: &App) -> tauri::Result<()> {
             let state = app.state::<Arc<AppState>>().inner().clone();
             match event.id().as_ref() {
                 "open" => show_window(app),
+                // The mini window: each download's progress, without opening the app.
+                "mini" => {
+                    state.windows.set_mini_dismissed(false);
+                    let _ = crate::windows::show_mini(app);
+                }
                 "pause_all" => {
                     tauri::async_runtime::spawn(async move { state.engine.pause_all().await });
                 }

@@ -130,16 +130,34 @@ fn main() {
             }
             app.manage(state);
             tray::create(app)?;
-            // Started by the browser for a download, or with Windows: stay in the tray.
+            // The main window starts hidden. Started by the browser for a download, or
+            // with Windows: it stays in the tray (only the download's own window shows).
+            // Otherwise it appears now, without a flash of an empty window first.
             let hide = from_browser || (from_startup && settings.start_minimized);
-            if let (true, Some(w)) = (hide, app.get_webview_window("main")) {
-                let _ = w.hide();
+            if let (false, Some(w)) = (hide, app.get_webview_window("main")) {
+                let _ = w.show();
+                let _ = w.set_focus();
             }
             Ok(())
         })
         .on_window_event(|window, event| {
             // Download windows and the mini window just close; only the main window
-            // goes to the tray.
+            // goes to the tray. A download window closed without answering its "start
+            // this download?" question throws away what it started in the background.
+            if let (Some(id), WindowEvent::Destroyed) = (
+                window
+                    .label()
+                    .strip_prefix("dl-")
+                    .and_then(|n| n.parse::<i64>().ok()),
+                event,
+            ) {
+                let state = window.state::<Arc<state::AppState>>().inner().clone();
+                tauri::async_runtime::spawn(async move {
+                    if state.engine.get(id).is_ok_and(|d| d.pending) {
+                        let _ = state.engine.remove(id, true).await;
+                    }
+                });
+            }
             if window.label() != "main" {
                 return;
             }

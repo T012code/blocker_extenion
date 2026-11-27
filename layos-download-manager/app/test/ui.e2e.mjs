@@ -153,12 +153,14 @@ try {
       // Group remove: everything finished at once.
       await page.click('.nav-item[data-filter="all"]');
       await page.locator('#rows tr.completed').first().waitFor({ timeout: 60_000 });
-      const finishedBefore = await page.locator('#rows tr.completed').count();
+      const finishedIds = await page.$$eval('#rows tr.completed', (rows) => rows.map((r) => r.dataset.id));
+      const finishedBefore = finishedIds.length;
       await page.click('#btn-delete');
       await page.check('input[name="scope"][value="finished"]');
       if (shots) await page.screenshot({ path: join(shots, 'app-remove.png') });
       await page.click('#remove-ok');
-      await page.waitForFunction(() => document.querySelectorAll('#rows tr.completed').length === 0);
+      // Those finished downloads are gone (another may finish meanwhile; it stays).
+      await page.waitForFunction((ids) => ids.every((id) => !document.querySelector(`#rows tr[data-id="${id}"]`)), finishedIds);
       console.log(`ok - "All finished" removes ${finishedBefore || 'the'} finished downloads in one go`);
 
       // Start with Windows and minimize to tray are settings.
@@ -776,6 +778,28 @@ async function layoutAndWindowTests() {
   await pw.waitForFunction(() => window.__ldmCalls.some((c) => c.cmd === 'resolve_duplicate' && c.args.choice === 'again' && c.args.remember));
   await pw.waitForFunction(() => window.__ldmCalls.some((c) => c.cmd === 'window_close'));
   console.log('ok - when a link comes in again, its download\'s window offers Open it / Download again (and can remember)');
+
+  // "Ask first" on: a browser download's own small window asks (name, folder, Start) while
+  // it already downloads, as IDM's "Download File Info"; the app itself stays in the tray.
+  await pw.goto(`${base}progress.html?mock&pending&id=6`);
+  await pw.locator('#confirm:not([hidden])').waitFor();
+  assert.equal(await pw.inputValue('#c-name'), 'studio-setup-2.4.exe');
+  await pw.locator('#c-line', { hasText: 'Already downloading in the background' }).waitFor();
+  await pw.waitForTimeout(700);
+  if (shots) await pw.screenshot({ path: join(shots, 'window-confirm.png') });
+  await pw.fill('#c-name', 'Studio 2.4 setup.exe');
+  await pw.click('#c-start');
+  await pw.waitForFunction(() => window.__ldmCalls.some((c) => c.cmd === 'confirm_download' && c.args.id === 6 && c.args.args.fileName === 'Studio 2.4 setup.exe' && c.args.args.start));
+  await pw.locator('#running:not([hidden])').waitFor();
+  await pw.locator('#name', { hasText: 'Studio 2.4 setup.exe' }).waitFor();
+  for (const [button, check] of [['#c-later', (c) => c.cmd === 'confirm_download' && c.args.args.start === false], ['#c-cancel', (c) => c.cmd === 'discard_download']]) {
+    await pw.goto(`${base}progress.html?mock&pending&id=6`);
+    await pw.locator('#confirm:not([hidden])').waitFor();
+    await pw.click(button);
+    await pw.waitForFunction((src) => window.__ldmCalls.some(eval(src)), check.toString());
+    await pw.waitForFunction(() => window.__ldmCalls.some((c) => c.cmd === 'window_close'));
+  }
+  console.log('ok - a new download\'s own window asks Start / Download later / Cancel while it already downloads, without the app');
 
   // An expired download's window offers Refresh link, handled by the main window.
   await pw.goto(`${base}progress.html?mock&id=5`);

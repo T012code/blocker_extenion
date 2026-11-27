@@ -2,7 +2,7 @@
 // Show in folder when it's done. It can shrink to one line, or be hidden (the download
 // carries on). Its label is "dl-<id>".
 
-import { invoke, isMock, listen, windowLabel } from './backend.js';
+import { invoke, isMock, listen, pick, windowLabel } from './backend.js';
 import { STATUS_TEXT, action, bytes, eta, percent, speed } from './format.js';
 import { hydrateIcons, icon } from './icons.js';
 import { renderMap } from './sectionmap.js';
@@ -53,9 +53,34 @@ const HINT = {
 };
 
 let shownStatus = '';
+/** A new download waiting for "Start": it's already downloading, shown under the
+ *  name and folder fields. */
+function renderConfirm(p) {
+  $('confirm').hidden = false;
+  $('running').hidden = true;
+  $('done').hidden = true;
+  $('c-host').textContent = host(d.request?.url ?? '');
+  if (!$('c-name').dataset.filled || document.activeElement !== $('c-name') && !$('c-name').dataset.edited) {
+    $('c-name').value = d.fileName;
+    $('c-name').dataset.filled = '1';
+  }
+  $('c-dir').placeholder = d.saveDir;
+  const pct = d.status === 'completed' ? 100 : percent(p.done, p.size);
+  $('c-bar').firstElementChild.style.setProperty('--p', String((pct ?? 0) / 100));
+  $('c-bar').classList.toggle('live', d.status === 'downloading');
+  $('c-line').textContent = d.status === 'completed' ? `Already downloaded (${bytes(p.size ?? p.done)}). Start saves it where you choose.`
+    : d.status === 'downloading' ? `Already downloading in the background: ${pct != null ? `${pct}% · ` : ''}${[bytes(p.done), speed(p.speed)].filter(Boolean).join(' · ')}`
+      : d.status === 'failed' || d.status === 'needsRefresh' ? (d.error ?? 'It stopped.') : 'Starting…';
+  const title = `Download file · ${d.fileName}`;
+  if (document.title !== title) { document.title = title; invoke('window_title', { title }).catch(() => {}); }
+  fit();
+}
+
 function render() {
   if (!d) return;
   const p = progress();
+  if (d.pending) return renderConfirm(p);
+  $('confirm').hidden = true;
   const finished = d.status === 'completed';
   $('running').hidden = finished;
   $('done').hidden = !finished;
@@ -143,6 +168,7 @@ async function resolveDuplicate(choice) {
 function setType() {
   const t = d.kind?.type === 'torrent' ? 'torrents' : d.kind?.type === 'media' ? 'video' : d.category ?? 'general';
   $('type').replaceChildren(icon(t, { size: 20 }));
+  $('c-type').replaceChildren(icon(t, { size: 20 }));
 }
 
 // The window is as tall as its content: one line, everything, or "done".
@@ -182,6 +208,7 @@ async function start() {
   }
   setType();
   render();
+  if (d.pending) $('c-start').focus();
   await checkDuplicate();
   await listen('duplicate', (dupId) => { if (dupId === id) checkDuplicate(); });
   await listen('engine', (ev) => {
@@ -201,6 +228,26 @@ async function start() {
 }
 
 $('toggle').addEventListener('click', () => setCompact(!compact));
+
+// "Start this download?" (it's already downloading in the background).
+async function answer(start) {
+  const name = $('c-name').value.trim();
+  const args = { fileName: name && name !== d.fileName ? name : null, saveDir: $('c-dir').value.trim() || null, start };
+  await run(invoke('confirm_download', { id, args }), 'Couldn\'t start it');
+  if (!start) invoke('window_close');
+}
+$('c-start').addEventListener('click', () => answer(true));
+$('c-later').addEventListener('click', () => answer(false));
+$('c-cancel').addEventListener('click', async () => {
+  await run(invoke('discard_download', { id }), 'Couldn\'t cancel it');
+  invoke('window_close');
+});
+$('c-name').addEventListener('input', () => { $('c-name').dataset.edited = '1'; });
+$('c-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') answer(true); });
+$('c-browse').addEventListener('click', async () => {
+  const dir = await pick({ directory: true, title: 'Save this download in' });
+  if (dir) $('c-dir').value = dir;
+});
 $('dup-existing').addEventListener('click', () => resolveDuplicate('existing'));
 $('dup-again').addEventListener('click', () => resolveDuplicate('again'));
 $('dup-dismiss').addEventListener('click', () => resolveDuplicate('dismiss'));

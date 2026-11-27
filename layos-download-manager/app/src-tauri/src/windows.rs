@@ -33,6 +33,46 @@ pub struct Windows {
     duplicates: Mutex<std::collections::HashMap<i64, ldm_ipc::BrowserDownload>>,
 }
 
+/// Which windows a download's change calls for.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Plan {
+    /// The mini window (anything downloading).
+    pub mini: bool,
+    /// The download's own window, with its progress (it started).
+    pub progress: bool,
+    /// The download's own window, saying it's complete.
+    pub done: bool,
+}
+
+/// `fresh`: added while the app runs (not carried over from last time).
+pub fn plan(d: &Download, s: &AppSettings, fresh: bool) -> Plan {
+    // Started in the background for an "add download" question: that question's own
+    // window is open already; nothing else shows until it's answered.
+    if d.pending {
+        return Plan::default();
+    }
+    let running = matches!(
+        d.status,
+        DownloadStatus::Downloading | DownloadStatus::Connecting
+    );
+    let mut p = Plan {
+        mini: running && s.show_mini_window,
+        ..Default::default()
+    };
+    // Downloads in a queue run unattended (no windows for them, as in IDM), and so do
+    // ones carried over from last time.
+    if !fresh || d.queue_id.is_some() {
+        return p;
+    }
+    // A torrent waiting for the VPN gets its window too, saying so.
+    p.progress = (running || d.status == DownloadStatus::Blocked) && s.show_progress_window;
+    p.done = matches!(
+        d.status,
+        DownloadStatus::Completed | DownloadStatus::Seeding
+    ) && s.show_complete_window;
+    p
+}
+
 pub fn label(id: i64) -> String {
     format!("dl-{id}")
 }
@@ -59,38 +99,19 @@ impl Windows {
     }
 
     /// A download changed: open its window when it starts or finishes, and the mini
-    /// window while anything downloads, as the settings say.
+    /// window while anything downloads, as the settings say. None of these needs the
+    /// main window: they open on their own while the app sits in the tray.
     pub fn updated(&self, app: &AppHandle, d: &Download, s: &AppSettings) {
-        // Started in the background for the "add download" window: nothing shows until
-        // it's confirmed.
-        if d.pending {
-            return;
-        }
-        let running = matches!(
-            d.status,
-            DownloadStatus::Downloading | DownloadStatus::Connecting
-        );
-        // A torrent waiting for the VPN gets its window too, saying so.
-        let started = running || d.status == DownloadStatus::Blocked;
-        if running && s.show_mini_window && !*self.mini_dismissed.lock().unwrap() {
+        let fresh = self.fresh.lock().unwrap().contains(&d.id);
+        let p = plan(d, s, fresh);
+        if p.mini && !*self.mini_dismissed.lock().unwrap() {
             let _ = show_mini(app);
         }
-        // Downloads in a queue run unattended: no windows for them, as in IDM.
-        if !self.fresh.lock().unwrap().contains(&d.id) || d.queue_id.is_some() {
-            return;
-        }
-        if started
-            && s.show_progress_window
-            && self.shown.lock().unwrap().insert(d.id)
-            && open_count(app) < MAX_AUTO_OPEN
+        if p.progress && self.shown.lock().unwrap().insert(d.id) && open_count(app) < MAX_AUTO_OPEN
         {
             let _ = open_download(app, d.id, false);
         }
-        let done = matches!(
-            d.status,
-            DownloadStatus::Completed | DownloadStatus::Seeding
-        );
-        if done && s.show_complete_window && self.finished.lock().unwrap().insert(d.id) {
+        if p.done && self.finished.lock().unwrap().insert(d.id) {
             let _ = open_download(app, d.id, true);
         }
     }
@@ -191,4 +212,92 @@ pub fn resize(w: &WebviewWindow, width: f64, height: f64) -> tauri::Result<()> {
         w.set_position(PhysicalPosition::new(x, y))?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn dl(status: DownloadStatus) -> Download {
+        let mut d: Download = serde_json::from_value(serde_json::json!({
+            "id": 1, "request": { "url": "https://example.com/a.zip" }, "finalUrl": null,
+            "fileName": "a.zip", "saveDir": "/d", "category": "compressed", "size": null,
+            "resumable": true, "contentType": null, "status": "queued", "error": null,
+            "downloaded": 0, "segments": [], "connections": 8, "speedLimit": 0, "queueId": null,
+            "tempPath": null, "createdAt": 0, "completedAt": null
+        }))
+        .unwrap();
+        d.status = status;
+        d
+    }
+
+    #[test]
+    fn a_new_download_shows_its_window_and_the_mini_window() {
+        let s = AppSettings::default();
+        let p = plan(&dl(DownloadStatus::Downloading), &s, true);
+        assert_eq!(
+            p,
+            Plan {
+                mini: true,
+                progress: true,
+                done: false
+            }
+        );
+        assert!(plan(&dl(DownloadStatus::Connecting), &s, true).progress);
+    }
+
+    #[test]
+    fn a_finished_download_shows_the_complete_window() {
+        let s = AppSettings::default();
+        assert_eq!(
+            plan(&dl(DownloadStatus::Completed), &s, true),
+            Plan {
+                mini: false,
+                progress: false,
+                done: true
+            }
+        );
+        assert!(
+            plan(&dl(DownloadStatus::Seeding), &s, true).done,
+            "a finished torrent too"
+        );
+    }
+
+    #[test]
+    fn a_torrent_waiting_for_the_vpn_shows_its_window() {
+        assert!(plan(&dl(DownloadStatus::Blocked), &AppSettings::default(), true).progress);
+    }
+
+    #[test]
+    fn queued_carried_over_and_unconfirmed_downloads_open_no_window() {
+        let s = AppSettings::default();
+        let mut queued = dl(DownloadStatus::Completed);
+        queued.queue_id = Some(3);
+        assert!(!plan(&queued, &s, true).done);
+        assert!(
+            !plan(&dl(DownloadStatus::Downloading), &s, false).progress,
+            "from last time"
+        );
+        let mut pending = dl(DownloadStatus::Downloading);
+        pending.pending = true;
+        assert_eq!(plan(&pending, &s, true), Plan::default());
+    }
+
+    #[test]
+    fn each_window_can_be_turned_off() {
+        let s = AppSettings {
+            show_progress_window: false,
+            show_complete_window: false,
+            show_mini_window: false,
+            ..Default::default()
+        };
+        assert_eq!(
+            plan(&dl(DownloadStatus::Downloading), &s, true),
+            Plan::default()
+        );
+        assert_eq!(
+            plan(&dl(DownloadStatus::Completed), &s, true),
+            Plan::default()
+        );
+    }
 }

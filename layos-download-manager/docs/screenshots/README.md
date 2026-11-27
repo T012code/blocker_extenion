@@ -192,3 +192,12 @@ The full name in the side bar on two lines; "Hide side bar" and "Exit" as labell
 | A folder for each type of file, and what to do with a link downloaded before | ![](offline-folders-duplicates/app-settings-folders.png) |
 | The Add window catches a link downloaded before | ![](offline-folders-duplicates/app-add-duplicate.png) |
 | A link that comes in again from the browser: its download's window asks | ![](offline-folders-duplicates/window-duplicate.png) |
+
+## Download windows without the app
+
+| | |
+| --- | --- |
+| A new download from the browser asks in its own window (already downloading) | ![](windows-without-app/window-confirm.png) |
+| Its progress | ![](windows-without-app/window-progress.png) |
+| Download complete | ![](windows-without-app/window-done.png) |
+| The mini window | ![](windows-without-app/window-mini.png) |

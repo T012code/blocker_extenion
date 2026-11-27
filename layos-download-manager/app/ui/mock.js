@@ -136,6 +136,11 @@ const seed = () => {
   update(e, { status: 'needsRefresh', downloaded: 40 * 1024 * 1024, error: 'the server refused the link (HTTP 403); it may have expired' });
 };
 seed();
+// ?pending: a download from the browser, started in the background, waiting for "Start" (id 6).
+if (new URLSearchParams(location.search).has('pending')) {
+  const p = make({ url: 'https://cdn.example.com/installers/studio-setup-2.4.exe', start: true, size: 180 * 1024 * 1024, connections: 8 });
+  p.pending = true;
+}
 // ?many=N adds N finished and waiting downloads, to try a long list.
 const many = Number(new URLSearchParams(location.search).get('many')) || 0;
 for (let i = 0; i < many; i++) {

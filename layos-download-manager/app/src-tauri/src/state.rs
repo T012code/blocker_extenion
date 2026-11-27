@@ -50,6 +50,15 @@ impl Frontend for WindowFrontend {
     }
 
     fn ask(&self, items: &[BrowserDownload], ids: &[Option<i64>], source: Source) {
+        // One file, already started in the background: its own small window asks (name,
+        // folder, Start), as IDM's "Download File Info" does; the app stays in the tray.
+        if let ([_], [Some(id)]) = (items, ids)
+            && source != Source::AllLinks
+            && crate::windows::open_download(&self.app, *id, true).is_ok()
+        {
+            return;
+        }
+        // Several files (or nothing started yet): the app's window lets you pick.
         show_window(&self.app);
         let _ = self.app.emit(
             "browser-download",

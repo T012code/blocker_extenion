@@ -18,6 +18,7 @@ struct Recorder {
     handle_duplicates: bool,
     asked: Mutex<Asked>,
     duplicates: Mutex<Vec<(i64, String)>>,
+    shown: std::sync::atomic::AtomicUsize,
 }
 
 impl Frontend for Recorder {
@@ -29,6 +30,9 @@ impl Frontend for Recorder {
             .lock()
             .unwrap()
             .push((items.iter().map(|i| i.url.clone()).collect(), ids.to_vec()));
+    }
+    fn show(&self) {
+        self.shown.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     }
     fn duplicate(&self, existing: &Download, item: &BrowserDownload) -> bool {
         self.duplicates
@@ -229,4 +233,27 @@ async fn the_same_torrent_is_caught_by_its_hash() {
         .await;
     assert_eq!(r, Response::Accepted { ids: vec![t] });
     assert_eq!(front.duplicates.lock().unwrap()[0].0, t);
+}
+
+#[tokio::test]
+async fn a_browser_download_never_brings_up_the_app() {
+    let (_dir, server, engine, service, front) = setup(Recorder::default()).await;
+    let Response::Accepted { ids } = service
+        .handle(capture(server.url("/files/tool.zip"), Source::Capture))
+        .await
+    else {
+        panic!()
+    };
+    assert_eq!(ids.len(), 1, "added and started at once");
+    until("running", || {
+        engine.get(ids[0]).unwrap().status != DownloadStatus::Queued
+    })
+    .await;
+    assert!(!engine.get(ids[0]).unwrap().pending);
+    assert_eq!(
+        front.shown.load(std::sync::atomic::Ordering::SeqCst),
+        0,
+        "the app's window wasn't asked to show"
+    );
+    assert!(front.asked.lock().unwrap().is_empty());
 }

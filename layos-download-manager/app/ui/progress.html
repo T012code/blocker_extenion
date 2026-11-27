@@ -26,6 +26,35 @@
       </div>
       <label class="check small"><input type="checkbox" id="dup-remember"><span>Do this every time</span></label>
     </section>
+    <!-- A new download from the browser, waiting for "Start" (it already downloads) -->
+    <section class="pw-confirm" id="confirm" hidden>
+      <header class="pw-head">
+        <span class="pw-type" id="c-type"></span>
+        <div class="pw-title">
+          <h1>Download file</h1>
+          <p class="muted small" id="c-host"></p>
+        </div>
+      </header>
+      <label class="field"><span>Save as</span><input id="c-name" type="text" spellcheck="false" autocomplete="off"></label>
+      <label class="field"><span>Save in</span>
+        <div class="pathfield">
+          <i data-icon="folder" class="pathfield-icon"></i>
+          <input id="c-dir" type="text" spellcheck="false" autocomplete="off">
+          <button class="pathfield-btn" type="button" id="c-browse"><i data-icon="folder-open"></i>Choose…</button>
+        </div>
+      </label>
+      <div class="pw-progress">
+        <div class="bar" id="c-bar"><span></span></div>
+        <p class="pw-line muted num" id="c-line">Starting…</p>
+      </div>
+      <footer class="pw-actions">
+        <button class="btn" id="c-cancel">Cancel</button>
+        <span class="spacer"></span>
+        <button class="btn" id="c-later" title="Keeps what's downloaded so far; continue it from the list">Download later</button>
+        <button class="btn primary" id="c-start"><i data-icon="play"></i>Start download</button>
+      </footer>
+    </section>
+
     <!-- While downloading -->
     <section class="pw-running" id="running">
       <header class="pw-head">

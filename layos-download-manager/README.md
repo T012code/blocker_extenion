@@ -85,6 +85,16 @@ Any download can be paused and continued. Most servers allow fetching part of a 
 Until the desktop app is ready, the browser extension's toolbar pop-up lists your downloads with live progress, speed and time left, and has **Pause** and **Continue** buttons.
 
 
+### Working from the tray, as in IDM
+
+The main window doesn't have to be open for any of this. With the app in the tray (or not running: the browser starts it, hidden):
+
+- **A new download** from the browser starts at once and its own small window appears, with the progress, speed, time left, sections and Pause. With "Ask before downloading what the browser sends" on, that same small window asks first (name, folder, **Start download / Download later / Cancel**) while the file already downloads underneath, like IDM's "Download File Info". Only "Download all links", which needs a list to pick from, opens the main window.
+- **Checking a download:** its window can be shrunk to one line, hidden and reopened. The **mini window** (bottom right, above other windows) sums up everything downloading; click a download in it to open its window. The tray menu's **Show downloads in progress** brings the mini window back at any time.
+- **When a download finishes**, its window turns into a "Download complete" window, with **Open** and **Show in folder**, on its own.
+
+Each of these windows can be turned off in Settings → General. The main window opens only when you ask for it (the tray icon, or "Open Layó's Download Manager"), and never flashes on screen when the browser starts the app.
+
 ### When the internet goes away
 
 If the network drops while files are downloading, every running download **pauses and keeps what it has**, with the reason in its status ("Paused: the internet connection was lost"). The app notices in two ways: Windows reports no usable network adapter (checked every 2 seconds), or a download's connections keep failing to connect (three times in a row). Nothing restarts by itself when the network is back: a banner says you're back online, and you continue the downloads (one button continues all of those paused this way). Torrents and video downloads pause the same way.
