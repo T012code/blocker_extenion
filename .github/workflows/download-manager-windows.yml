@@ -5,12 +5,17 @@ on:
   push:
     branches: ["**"]
     # Pushing a tag like ldm-v0.2.0 also publishes a GitHub release (path filters
-    # don't apply to tags).
+    # don't apply to tags). So does running it by hand with "release" ticked.
     tags: ["ldm-v*"]
     paths: ["layos-download-manager/**", ".github/workflows/download-manager-windows.yml"]
   pull_request:
     paths: ["layos-download-manager/**"]
   workflow_dispatch:
+    inputs:
+      release:
+        description: "Publish a GitHub release (tag ldm-v<version>) with the installer"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -88,19 +93,22 @@ jobs:
             layos-download-manager/extension/dist/*.zip
           if-no-files-found: error
 
-      # ---- Release: only for tags like ldm-v0.2.0, and only if the tag matches the app.
-      - name: Check the tag matches the app version
-        if: startsWith(github.ref, 'refs/tags/ldm-v')
+      # ---- Release: for a pushed tag like ldm-v0.2.0 (which must match the app's version),
+      # or a manual run with "release" ticked (the tag ldm-v<version> is created on this commit).
+      - name: Check the version for the release
+        if: startsWith(github.ref, 'refs/tags/ldm-v') || inputs.release
         shell: pwsh
         run: |
           $version = (Get-Content app/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
-          $tag = "${{ github.ref_name }}".Substring(5)
-          if ($tag -ne $version) { throw "Tag ldm-v$tag doesn't match the app version $version" }
+          if ("${{ github.ref }}".StartsWith('refs/tags/ldm-v')) {
+            $tag = "${{ github.ref_name }}".Substring(5)
+            if ($tag -ne $version) { throw "Tag ldm-v$tag doesn't match the app version $version" }
+          }
           if (-not (Test-Path "docs/releases/$version.md")) { throw "Missing release notes docs/releases/$version.md" }
           "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Gather the release files (plain names; GitHub mangles spaces and ’)
-        if: startsWith(github.ref, 'refs/tags/ldm-v')
+        if: startsWith(github.ref, 'refs/tags/ldm-v') || inputs.release
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force release | Out-Null
@@ -110,9 +118,11 @@ jobs:
           Get-ChildItem release | Format-Table Name, Length
 
       - name: Publish the release
-        if: startsWith(github.ref, 'refs/tags/ldm-v')
+        if: startsWith(github.ref, 'refs/tags/ldm-v') || inputs.release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ldm-v${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
           name: Layó's Download Manager ${{ env.VERSION }}
           body_path: layos-download-manager/docs/releases/${{ env.VERSION }}.md
           files: layos-download-manager/release/*
