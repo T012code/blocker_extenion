@@ -17,6 +17,11 @@ pub struct AppSettings {
     pub download_dir: PathBuf,
     /// Save into Video, Music, Documents… sub-folders.
     pub category_folders: bool,
+    /// Folders chosen for some types of file, instead of `<download folder>/<Type>`.
+    pub category_dirs: std::collections::BTreeMap<ldm_engine::Category, PathBuf>,
+    /// When a link that was downloaded before comes in: ask, download it again, or
+    /// open (or continue) the one already there.
+    pub duplicates: Duplicates,
     /// Sections (parallel connections) for new downloads.
     pub default_connections: u8,
     /// Bytes per second for all downloads together, 0 = unlimited.
@@ -47,6 +52,17 @@ pub struct AppSettings {
     pub privacy: Privacy,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Duplicates {
+    #[default]
+    Ask,
+    /// Add it again under a numbered name ("file (1).zip").
+    Again,
+    /// Open the finished file, or continue the unfinished download.
+    Existing,
+}
+
 /// Version 2: browser downloads no longer ask first; they start with their own window.
 const VERSION: u32 = 2;
 
@@ -56,6 +72,8 @@ impl Default for AppSettings {
             version: VERSION,
             download_dir: PathBuf::new(),
             category_folders: true,
+            category_dirs: Default::default(),
+            duplicates: Duplicates::Ask,
             default_connections: 8,
             global_speed_limit: 0,
             // Browser downloads start at once, each in its own small window.
@@ -116,14 +134,35 @@ impl AppSettings {
     }
 
     /// Applies the settings that live in the engine.
+    /// Creates the folder for each type of file (Video, Music, Compressed, Programs,
+    /// Documents, Torrents, General) if it isn't there yet; existing ones are used as
+    /// they are.
+    pub fn ensure_folders(&self, engine: &ldm_engine::Engine) {
+        let config = engine.config();
+        let _ = std::fs::create_dir_all(&config.download_dir);
+        for c in ldm_engine::Category::ALL {
+            let dir = config.dir_for(c);
+            if let Err(e) = std::fs::create_dir_all(&dir) {
+                tracing::warn!("could not create {}: {e}", dir.display());
+            }
+        }
+    }
+
     pub fn apply(&self, engine: &ldm_engine::Engine) {
         let dir = self.download_dir.clone();
         let categories = self.category_folders;
         let limit = self.global_speed_limit;
         let sections = self.default_connections;
+        let chosen: std::collections::HashMap<_, _> = self
+            .category_dirs
+            .iter()
+            .filter(|(_, d)| !d.as_os_str().is_empty())
+            .map(|(c, d)| (*c, d.clone()))
+            .collect();
         engine.update_config(|c| {
             c.download_dir = dir;
             c.category_folders = categories;
+            c.category_dirs = chosen;
             c.global_speed_limit = limit;
             c.default_connections = sections;
         });
@@ -148,5 +187,46 @@ mod tests {
             serde_json::from_str(&serde_json::to_string(&old).unwrap()).unwrap();
         again.migrate();
         assert!(again.ask_for_browser_downloads);
+    }
+}
+
+#[cfg(test)]
+mod folder_tests {
+    use super::*;
+
+    #[test]
+    fn creates_each_type_folder_and_honours_chosen_ones() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = ldm_engine::Engine::open(ldm_engine::EngineConfig::new(dir.path())).unwrap();
+        let mut s = AppSettings {
+            download_dir: dir.path().join("Downloads"),
+            ..Default::default()
+        };
+        // An existing folder is used as it is.
+        std::fs::create_dir_all(s.download_dir.join("Video")).unwrap();
+        std::fs::write(s.download_dir.join("Video").join("keep.txt"), b"x").unwrap();
+        s.category_dirs
+            .insert(ldm_engine::Category::Music, dir.path().join("Songs"));
+        s.apply(&engine);
+        s.ensure_folders(&engine);
+        for name in [
+            "Compressed",
+            "Documents",
+            "Programs",
+            "Video",
+            "Torrents",
+            "General",
+        ] {
+            assert!(s.download_dir.join(name).is_dir(), "{name}");
+        }
+        assert!(
+            !s.download_dir.join("Music").exists(),
+            "Music has its own folder"
+        );
+        assert!(dir.path().join("Songs").is_dir());
+        assert!(s.download_dir.join("Video").join("keep.txt").exists());
+        // Saved and read back.
+        let back: AppSettings = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
+        assert_eq!(back.category_dirs, s.category_dirs);
     }
 }

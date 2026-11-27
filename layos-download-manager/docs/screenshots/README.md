@@ -183,3 +183,12 @@ The full name in the side bar on two lines; "Hide side bar" and "Exit" as labell
 | --- | --- |
 | Tooltip on an icon button | ![](sidebar-columns-exit/after/app-tooltip.png) |
 | Moving a column by dragging its header | ![](sidebar-columns-exit/after/app-column-move.png) |
+
+## Offline, folders and duplicates
+
+| | |
+| --- | --- |
+| The network went away: downloads paused, with the reason | ![](offline-folders-duplicates/app-offline.png) |
+| A folder for each type of file, and what to do with a link downloaded before | ![](offline-folders-duplicates/app-settings-folders.png) |
+| The Add window catches a link downloaded before | ![](offline-folders-duplicates/app-add-duplicate.png) |
+| A link that comes in again from the browser: its download's window asks | ![](offline-folders-duplicates/window-duplicate.png) |

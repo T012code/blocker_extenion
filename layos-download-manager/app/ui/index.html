@@ -88,6 +88,13 @@
         <button class="btn primary" id="qb-start"><i data-icon="play"></i>Start queue</button>
       </div>
 
+      <div class="banner alert" id="network-banner" hidden role="status">
+        <i data-icon="offline" class="net-off"></i><i data-icon="online" class="net-on"></i>
+        <span id="network-text"></span>
+        <button class="btn small" id="network-continue" hidden><i data-icon="play"></i>Continue paused downloads</button>
+        <button class="btn small subtle icon" id="network-close" title="Hide this message" aria-label="Hide this message"><i data-icon="x"></i></button>
+      </div>
+
       <div class="banner" id="privacy-banner" hidden role="status">
         <i data-icon="vpn"></i>
         <span id="privacy-banner-text">Torrents are waiting for a VPN or proxy.</span>
@@ -173,6 +180,14 @@
         </div>
       </label>
       <div class="probe-info" id="add-info" hidden></div>
+      <div class="dup-note" id="add-dup" hidden role="status">
+        <span class="dup-mark"><i data-icon="copy"></i></span>
+        <div class="dup-body">
+          <strong id="add-dup-title">You've downloaded this before</strong>
+          <span class="muted small" id="add-dup-text"></span>
+        </div>
+        <button class="btn small" type="button" id="add-dup-use">Open it</button>
+      </div>
       <div class="formats" id="add-formats" hidden role="radiogroup" aria-label="Format"></div>
       <label class="field"><span>Save as</span><input id="add-name" type="text" placeholder="Name from the server"></label>
       <label class="field"><span>Save in</span>
@@ -420,7 +435,15 @@
             <button class="pathfield-btn" type="button" id="set-browse"><i data-icon="folder-open"></i>Choose…</button>
           </div>
           </label>
-          <label class="check"><input type="checkbox" name="categoryFolders"><span>Sort into Video, Music, Documents and other folders</span></label>
+          <label class="check"><input type="checkbox" name="categoryFolders"><span>Sort into a folder for each type of file<small>Video, Music, Documents, Compressed, Programs, Torrents and General, inside the download folder. Folders that are already there are used as they are; missing ones are created.</small></span></label>
+          <div class="type-folders" id="type-folders" role="group" aria-label="Folder for each type of file"></div>
+          <label class="field"><span>When a link was downloaded before</span>
+            <select name="duplicates">
+              <option value="ask">Ask me what to do</option>
+              <option value="again">Download it again (with a numbered name)</option>
+              <option value="existing">Open the finished file, or continue the download</option>
+            </select>
+          </label>
           <label class="field"><span>Sections for new downloads</span>
             <select name="defaultConnections" id="set-sections"></select>
             <small>Each file downloads in this many parts at once. 8–16 suits most servers; some refuse more.</small>

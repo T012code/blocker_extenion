@@ -2710,6 +2710,7 @@ dependencies = [
 name = "layos-download-manager"
 version = "0.1.0"
 dependencies = [
+ "if-addrs",
  "ldm-engine",
  "ldm-ipc",
  "ldm-media",
@@ -2723,6 +2724,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-notification",
  "tauri-plugin-opener",
+ "tempfile",
  "tokio",
  "tracing",
  "winreg",

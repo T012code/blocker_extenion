@@ -23,6 +23,8 @@ pub struct ServerOptions {
     pub content_type: Option<String>,
     /// Every request gets 403 Forbidden, as when a signed link has expired.
     pub refuse: bool,
+    /// Connections are closed without an answer, as when the network is gone.
+    pub offline: bool,
 }
 
 impl Default for ServerOptions {
@@ -37,6 +39,7 @@ impl Default for ServerOptions {
             content_disposition: None,
             content_type: Some("application/octet-stream".into()),
             refuse: false,
+            offline: false,
         }
     }
 }
@@ -157,6 +160,9 @@ async fn handle(mut sock: TcpStream, state: Arc<State>) -> std::io::Result<()> {
     }
 
     let opts = state.options.lock().unwrap().clone();
+    if opts.offline {
+        return Ok(());
+    }
     if opts.refuse {
         return respond_status(&mut sock, "403 Forbidden").await;
     }
@@ -246,6 +252,10 @@ async fn send_body(
     };
     let chunk = 16 * 1024;
     for part in data.chunks(chunk) {
+        // The network went away: connections already open are cut as well.
+        if state.options.lock().unwrap().offline {
+            return Ok(());
+        }
         sock.write_all(part).await?;
         if let Some(rate) = rate {
             tokio::time::sleep(Duration::from_secs_f64(part.len() as f64 / rate as f64)).await;

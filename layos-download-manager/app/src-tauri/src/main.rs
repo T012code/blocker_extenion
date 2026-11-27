@@ -3,6 +3,7 @@
 
 mod associations;
 mod commands;
+mod network;
 mod power;
 mod settings;
 mod state;
@@ -207,6 +208,12 @@ fn main() {
             commands::window_title,
             commands::show_app,
             commands::exit_app,
+            commands::start_background,
+            commands::confirm_download,
+            commands::discard_download,
+            commands::find_duplicate,
+            commands::get_duplicate,
+            commands::resolve_duplicate,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Layó's Download Manager");

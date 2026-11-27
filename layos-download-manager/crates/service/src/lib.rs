@@ -22,9 +22,17 @@ pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// What the user sees when the browser sends something.
 pub trait Frontend: Send + Sync {
-    /// Shows the "add download" window for these files and returns true, or returns
-    /// false to have them added and started straight away.
-    fn ask(&self, _items: &[BrowserDownload], _source: Source) -> bool {
+    /// Whether downloads from the browser go to the "add download" window first.
+    /// False: they're added and started straight away.
+    fn will_ask(&self, _source: Source) -> bool {
+        false
+    }
+    /// Shows the "add download" window. `ids[i]` is the download already started in
+    /// the background for `items[i]` (unconfirmed), or None.
+    fn ask(&self, _items: &[BrowserDownload], _ids: &[Option<i64>], _source: Source) {}
+    /// A link that was downloaded before came in again. Returns true when the frontend
+    /// takes care of it (asks, or opens/continues the existing one); false adds it again.
+    fn duplicate(&self, _existing: &Download, _item: &BrowserDownload) -> bool {
         false
     }
     fn show(&self) {}
@@ -123,6 +131,7 @@ impl Service {
             )
         });
         list.into_iter()
+            .filter(|d| !d.pending)
             .take(LIST_LIMIT)
             .map(|d| summary(&d, live.get(&d.id).copied()))
             .collect()
@@ -207,6 +216,19 @@ impl Service {
         Ok(Refresh::OpenPage(page))
     }
 
+    /// A download already in the list for this link (same address, or the same torrent),
+    /// if any. Downloads waiting for confirmation don't count.
+    pub fn find_duplicate(&self, url: &str) -> Option<Download> {
+        let hash = info_hash(url);
+        let mut list = self.engine.list();
+        list.sort_by_key(|d| std::cmp::Reverse(d.id));
+        list.into_iter().filter(|d| !d.pending).find(|d| {
+            same_link(url, &d.request.url)
+                || d.final_url.as_deref().is_some_and(|f| same_link(url, f))
+                || (hash.is_some() && hash == info_hash(&d.request.url))
+        })
+    }
+
     /// Stops waiting for a fresh link for this download.
     pub fn cancel_refresh(&self, id: i64) {
         self.waiting.lock().unwrap().remove(&id);
@@ -230,7 +252,7 @@ impl Service {
         let waiting = self.waiting_for_link();
         let names = candidate_names(item);
         let found = self.engine.list().into_iter().find(|d| {
-            if !matches!(d.kind, DownloadKind::Http) || self.engine.is_running(d.id) {
+            if !matches!(d.kind, DownloadKind::Http) || d.pending || self.engine.is_running(d.id) {
                 return false;
             }
             let name = names.iter().any(|n| n.eq_ignore_ascii_case(&d.file_name));
@@ -318,9 +340,32 @@ impl Service {
             return Response::Accepted { ids: refreshed };
         }
         let items = rest;
+        // Downloaded before? (One link at a time, as IDM asks.)
+        if let [item] = items.as_slice()
+            && source != Source::AllLinks
+            && let Some(existing) = self.find_duplicate(&item.url)
+            && self.frontend.duplicate(&existing, item)
+        {
+            refreshed.push(existing.id);
+            return Response::Accepted { ids: refreshed };
+        }
         // Several links always go to the window so the user can pick, when there is one.
         let wants_window = ask.unwrap_or(true) || source == Source::AllLinks;
-        if wants_window && self.frontend.ask(&items, source) {
+        if wants_window && self.frontend.will_ask(source) {
+            // Like IDM: a file starts downloading while the window waits for an answer.
+            let background = items.len() <= 3 && source != Source::AllLinks;
+            let mut ids = Vec::with_capacity(items.len());
+            for item in &items {
+                let id = if background && is_plain_file(item) {
+                    let mut new = to_new_download(item.clone(), true);
+                    new.pending = true;
+                    self.engine.add(new).await.ok()
+                } else {
+                    None
+                };
+                ids.push(id);
+            }
+            self.frontend.ask(&items, &ids, source);
             return Response::Accepted { ids: Vec::new() };
         }
         let mut ids = refreshed;
@@ -381,6 +426,24 @@ fn percent_decode(s: &str) -> String {
         }
     }
     String::from_utf8_lossy(&out).into_owned()
+}
+
+/// A file from a web link (not a video format, a magnet link or a .torrent on disk).
+fn is_plain_file(item: &BrowserDownload) -> bool {
+    is_web_url(&item.url) && item.media.is_none()
+}
+
+/// The same address, ignoring what follows "#".
+fn same_link(a: &str, b: &str) -> bool {
+    let cut = |u: &str| u.split('#').next().unwrap_or(u).trim().to_string();
+    !a.trim().is_empty() && cut(a) == cut(b)
+}
+
+/// A magnet link's info hash, lowercased.
+fn info_hash(url: &str) -> Option<String> {
+    let lower = url.to_ascii_lowercase();
+    let at = lower.find("xt=urn:btih:")? + "xt=urn:btih:".len();
+    Some(lower[at..].split('&').next()?.to_string())
 }
 
 fn is_web_url(url: &str) -> bool {

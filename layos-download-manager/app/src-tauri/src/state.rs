@@ -13,7 +13,7 @@ use ldm_torrent::{TorrentOptions, TorrentRunner};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::settings::AppSettings;
+use crate::settings::{AppSettings, Duplicates};
 
 pub struct AppState {
     pub engine: Engine,
@@ -34,6 +34,8 @@ pub struct AppState {
 pub struct BrowserRequest {
     pub items: Vec<BrowserDownload>,
     pub source: Source,
+    /// Per item: the download already started in the background (unconfirmed), if any.
+    pub ids: Vec<Option<i64>>,
 }
 
 struct WindowFrontend {
@@ -42,20 +44,42 @@ struct WindowFrontend {
 }
 
 impl Frontend for WindowFrontend {
-    fn ask(&self, items: &[BrowserDownload], source: Source) -> bool {
-        if !*self.ask.lock().unwrap() {
-            return false;
-        }
+    /// "Download all links" always lets you pick; single downloads follow the setting.
+    fn will_ask(&self, source: Source) -> bool {
+        source == Source::AllLinks || *self.ask.lock().unwrap()
+    }
+
+    fn ask(&self, items: &[BrowserDownload], ids: &[Option<i64>], source: Source) {
         show_window(&self.app);
-        self.app
-            .emit(
-                "browser-download",
-                BrowserRequest {
-                    items: items.to_vec(),
-                    source,
-                },
-            )
-            .is_ok()
+        let _ = self.app.emit(
+            "browser-download",
+            BrowserRequest {
+                items: items.to_vec(),
+                source,
+                ids: ids.to_vec(),
+            },
+        );
+    }
+
+    fn duplicate(&self, existing: &ldm_engine::Download, item: &BrowserDownload) -> bool {
+        let Some(state) = self.app.try_state::<Arc<AppState>>() else {
+            return false;
+        };
+        let choice = state.settings.lock().unwrap().duplicates;
+        match choice {
+            Duplicates::Again => false,
+            Duplicates::Existing => {
+                state.use_existing(&self.app, existing);
+                true
+            }
+            Duplicates::Ask => {
+                // The existing download's own window asks what to do.
+                state.windows.set_duplicate(existing.id, item.clone());
+                let _ = crate::windows::open_download(&self.app, existing.id, true);
+                let _ = self.app.emit("duplicate", existing.id);
+                true
+            }
+        }
     }
 
     fn show(&self) {
@@ -122,6 +146,8 @@ impl AppState {
         });
         state.start_torrents().await;
         state.forward_events(app.clone());
+        state.watch_network(app.clone());
+        state.settings.lock().unwrap().ensure_folders(&state.engine);
         // A scheduled queue finished: quit, sleep or shut down if it says so.
         let mut frx = state.queues.subscribe_finished();
         let fapp = app.clone();
@@ -208,6 +234,7 @@ impl AppState {
                                 let s = me.settings.lock().unwrap().clone();
                                 if download.status == DownloadStatus::Completed
                                     && s.notify_on_complete
+                                    && !download.pending
                                 {
                                     notify_done(&app, &download.file_name);
                                 }
@@ -219,6 +246,63 @@ impl AppState {
                     }
                     Err(RecvError::Lagged(_)) => {}
                     Err(RecvError::Closed) => break,
+                }
+            }
+        });
+    }
+
+    /// For a link downloaded before: open the finished file, or continue the
+    /// unfinished download; either way its window shows.
+    pub fn use_existing(&self, app: &AppHandle, d: &ldm_engine::Download) {
+        if d.status == DownloadStatus::Completed {
+            let _ = tauri_plugin_opener::open_path(d.final_path(), None::<&str>);
+        } else if !self.engine.is_running(d.id) {
+            let _ = self.engine.start(d.id);
+        }
+        let _ = crate::windows::open_download(app, d.id, true);
+    }
+
+    /// Watches the network. When it goes away, every running download pauses (or
+    /// stops, if its server can't continue); nothing restarts by itself when it's back.
+    fn watch_network(self: &Arc<Self>, app: AppHandle) {
+        let me = self.clone();
+        tauri::async_runtime::spawn(async move {
+            let mut online = true;
+            let mut misses = 0u32;
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                let now = crate::network::online();
+                if now {
+                    misses = 0;
+                    if !online {
+                        online = true;
+                        let _ = app.emit("network", serde_json::json!({ "online": true }));
+                    }
+                    continue;
+                }
+                misses += 1;
+                // Two checks in a row, so a quick reconnect doesn't pause everything.
+                if online && misses >= 2 {
+                    online = false;
+                    let paused = me.engine.pause_all_offline().await;
+                    let _ = app.emit(
+                        "network",
+                        serde_json::json!({ "online": false, "paused": paused.len() }),
+                    );
+                    if !paused.is_empty() {
+                        use tauri_plugin_notification::NotificationExt;
+                        let n = paused.len();
+                        let _ = app
+                            .notification()
+                            .builder()
+                            .title("No internet connection")
+                            .body(if n == 1 {
+                                "A download was paused. Continue it when you're back online.".to_string()
+                            } else {
+                                format!("{n} downloads were paused. Continue them when you're back online.")
+                            })
+                            .show();
+                    }
                 }
             }
         });

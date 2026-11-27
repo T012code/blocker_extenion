@@ -113,6 +113,33 @@ function render() {
   }
 }
 
+// ---- The same link came in again: ask what to do (as IDM does).
+
+async function checkDuplicate() {
+  const item = await invoke('get_duplicate', { id }).catch(() => null);
+  $('dup').hidden = !item;
+  if (!item || !d) return fit();
+  const done = d.status === 'completed' || d.status === 'seeding';
+  $('dup-title').textContent = done ? 'You\'ve downloaded this before' : 'This is already downloading';
+  $('dup-text').textContent = done
+    ? `${d.fileName} is already on this computer. Open it, or download a second copy with a numbered name.`
+    : `${d.fileName} is in your list, not finished yet. Continue it, or start a second copy.`;
+  $('dup-existing').textContent = done ? 'Open it' : 'Continue it';
+  $('dup-again').hidden = d.kind?.type === 'torrent';
+  $('dup-remember').checked = false;
+  fit();
+  $('dup-existing').focus();
+}
+
+async function resolveDuplicate(choice) {
+  const remember = $('dup-remember').checked;
+  $('dup').hidden = true;
+  fit();
+  await run(invoke('resolve_duplicate', { id, choice, remember }), 'Couldn\'t do that');
+  // Opened the finished file, or started a second copy (which gets its own window).
+  if (choice !== 'dismiss' && (d.status === 'completed' || choice === 'again')) invoke('window_close');
+}
+
 function setType() {
   const t = d.kind?.type === 'torrent' ? 'torrents' : d.kind?.type === 'media' ? 'video' : d.category ?? 'general';
   $('type').replaceChildren(icon(t, { size: 20 }));
@@ -155,6 +182,8 @@ async function start() {
   }
   setType();
   render();
+  await checkDuplicate();
+  await listen('duplicate', (dupId) => { if (dupId === id) checkDuplicate(); });
   await listen('engine', (ev) => {
     if (ev.type === 'progress' && ev.id === id) live = ev;
     else if ((ev.type === 'updated' || ev.type === 'added') && ev.download.id === id) {
@@ -172,6 +201,9 @@ async function start() {
 }
 
 $('toggle').addEventListener('click', () => setCompact(!compact));
+$('dup-existing').addEventListener('click', () => resolveDuplicate('existing'));
+$('dup-again').addEventListener('click', () => resolveDuplicate('again'));
+$('dup-dismiss').addEventListener('click', () => resolveDuplicate('dismiss'));
 $('hide').addEventListener('click', () => invoke('window_close'));
 $('close').addEventListener('click', () => invoke('window_close'));
 $('pause').addEventListener('click', () => {

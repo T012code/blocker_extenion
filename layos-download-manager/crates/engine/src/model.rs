@@ -192,6 +192,10 @@ pub struct Download {
     pub description: Option<String>,
     #[serde(default)]
     pub kind: DownloadKind,
+    /// Started in the background while the "add download" window waits for the user
+    /// to confirm (as IDM does). Hidden from the list until confirmed; removed if not.
+    #[serde(default)]
+    pub pending: bool,
 }
 
 impl Download {
@@ -222,6 +226,9 @@ pub struct NewDownload {
     /// Start right away. When false the download waits as `Queued`.
     #[serde(default)]
     pub start: bool,
+    /// Start in the background, unconfirmed (see `Download::pending`).
+    #[serde(default)]
+    pub pending: bool,
 }
 
 /// What the server said about a link before downloading.

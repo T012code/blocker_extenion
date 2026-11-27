@@ -45,6 +45,10 @@ pub struct EngineConfig {
     pub min_segment_size: u64,
     pub max_retries: u32,
     pub retry_delay: Duration,
+    /// Connection failures in a row (the network is gone) before a download pauses.
+    pub offline_retries: u32,
+    /// Folders chosen for some categories instead of `<download_dir>/<Category>`.
+    pub category_dirs: HashMap<Category, PathBuf>,
     /// Bytes per second across all downloads, 0 = unlimited.
     pub global_speed_limit: u64,
     pub progress_interval: Duration,
@@ -60,12 +64,23 @@ impl EngineConfig {
             min_segment_size: 1024 * 1024,
             max_retries: 8,
             retry_delay: Duration::from_secs(1),
+            offline_retries: 3,
+            category_dirs: HashMap::new(),
             global_speed_limit: 0,
             progress_interval: Duration::from_millis(500),
         }
     }
 
-    fn dir_for(&self, category: Category) -> PathBuf {
+    /// Where a category's files go: the folder chosen for it, else its sub-folder of the
+    /// download folder (or the download folder itself when sorting is off).
+    pub fn dir_for(&self, category: Category) -> PathBuf {
+        if let Some(d) = self
+            .category_dirs
+            .get(&category)
+            .filter(|d| !d.as_os_str().is_empty())
+        {
+            return d.clone();
+        }
         if self.category_folders {
             self.download_dir.join(category.folder_name())
         } else {
@@ -122,6 +137,14 @@ impl Engine {
         config.default_connections = config.default_connections.clamp(1, MAX_CONNECTIONS);
         let mut downloads = BTreeMap::new();
         for mut d in store.load_all()? {
+            // Started for an "add download" window that was never answered.
+            if d.pending {
+                if let Some(tmp) = &d.temp_path {
+                    let _ = std::fs::remove_file(tmp);
+                }
+                store.delete(d.id)?;
+                continue;
+            }
             // The app closed while these were running.
             if d.status.is_active() {
                 d.status = DownloadStatus::Paused;
@@ -248,6 +271,7 @@ impl Engine {
                 Category::Music
             }
             DownloadKind::Media(_) => Category::Video,
+            DownloadKind::Torrent(_) => Category::Torrents,
             _ => Category::from_file_name(&file_name),
         };
         let (save_dir, dir_locked) = match new.save_dir {
@@ -282,6 +306,7 @@ impl Engine {
             completed_at: None,
             description: new.description,
             kind: new.kind,
+            pending: new.pending,
         };
         self.inner.store.lock().unwrap().save(&d)?;
         self.inner.downloads.lock().unwrap().insert(id, d.clone());
@@ -343,6 +368,16 @@ impl Engine {
                 Err(_) if cancel.is_cancelled() => (DownloadStatus::Paused, None),
                 Err(e @ Error::LinkRefused(_)) => {
                     (DownloadStatus::NeedsRefresh, Some(e.to_string()))
+                }
+                // The network went away: pause, keeping everything, unless the server
+                // can't continue a download (then continuing has to start over).
+                Err(e) if e.is_connection_lost() => {
+                    let d = inner.get(id).ok();
+                    if d.is_some_and(|d| loses_progress(&d)) {
+                        (DownloadStatus::Failed, Some(STOPPED_OFFLINE.into()))
+                    } else {
+                        (DownloadStatus::Paused, Some(PAUSED_OFFLINE.into()))
+                    }
                 }
                 Err(e) => (DownloadStatus::Failed, Some(e.to_string())),
             };
@@ -432,29 +467,92 @@ impl Engine {
         Ok(())
     }
 
-    /// Changes where a download that hasn't started yet will be saved, or its name.
-    pub fn set_target(
+    /// Changes where a download is saved, or its name, at any time: before it starts,
+    /// while it runs (its part file stays put and the finished file goes to the new
+    /// place), or after it finished (the file is moved now). This is what lets a download
+    /// start in the background while the "add download" window waits for an answer.
+    pub async fn set_target(
         &self,
         id: DownloadId,
         save_dir: Option<PathBuf>,
         file_name: Option<String>,
     ) -> Result<()> {
         let d = self.get(id)?;
-        if d.temp_path.is_some() || self.is_running(id) {
-            return Err(Error::AlreadyRunning);
+        let name = file_name
+            .map(|n| filename::sanitize(&n))
+            .filter(|n| !n.is_empty());
+        if d.status == DownloadStatus::Completed && !matches!(d.kind, DownloadKind::Torrent(_)) {
+            let dir = save_dir.clone().unwrap_or_else(|| d.save_dir.clone());
+            let wanted = name.clone().unwrap_or_else(|| d.file_name.clone());
+            let from = d.final_path();
+            let to = {
+                let _naming = self.inner.naming.lock().await;
+                std::fs::create_dir_all(&dir)?;
+                let to = if dir.join(&wanted) == from {
+                    from.clone()
+                } else {
+                    filename::unique_path(&dir, &wanted)
+                };
+                if to != from {
+                    move_file(&from, &to)?;
+                }
+                to
+            };
+            let final_name = to
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or(&wanted)
+                .to_string();
+            self.inner.update(id, true, |d| {
+                d.save_dir = dir;
+                d.save_dir_locked = true;
+                d.file_name = final_name;
+                d.file_name_locked = true;
+            });
+            return Ok(());
         }
         self.inner.update(id, true, |d| {
             if let Some(dir) = save_dir {
                 d.save_dir = dir;
                 d.save_dir_locked = true;
             }
-            if let Some(name) = file_name {
-                d.file_name = filename::sanitize(&name);
+            if let Some(name) = name {
+                d.category = Category::from_file_name(&name);
+                d.file_name = name;
                 d.file_name_locked = true;
-                d.category = Category::from_file_name(&d.file_name);
             }
         });
         Ok(())
+    }
+
+    /// The user confirmed a download that started in the background: it shows in the list.
+    pub fn confirm(&self, id: DownloadId) -> Result<()> {
+        self.get(id)?;
+        self.inner.update(id, true, |d| d.pending = false);
+        Ok(())
+    }
+
+    /// The network went away: every running download pauses, keeping what it has.
+    /// Downloads from servers that can't continue stop instead (continuing starts them
+    /// over). Nothing restarts by itself; the user continues them.
+    pub async fn pause_all_offline(&self) -> Vec<DownloadId> {
+        let ids: Vec<_> = self.inner.running.lock().unwrap().keys().copied().collect();
+        for id in &ids {
+            let _ = self.pause(*id).await;
+            self.inner.update(*id, true, |d| {
+                if d.status == DownloadStatus::Completed {
+                    return;
+                }
+                if loses_progress(d) {
+                    d.status = DownloadStatus::Failed;
+                    d.error = Some(STOPPED_OFFLINE.into());
+                } else {
+                    d.status = DownloadStatus::Paused;
+                    d.error = Some(PAUSED_OFFLINE.into());
+                }
+            });
+        }
+        ids
     }
 
     /// Bytes per second for one download, 0 = unlimited. Applies at once if it's running.
@@ -642,7 +740,22 @@ async fn drive(
     }
     d.status = DownloadStatus::Downloading;
     let segments = d.segments.clone();
-    inner.update(id, true, |rec| *rec = d.clone());
+    inner.update(id, true, |rec| {
+        // A new place or name chosen while it was connecting, and confirmation, stay.
+        let dir = rec.save_dir_locked.then(|| rec.save_dir.clone());
+        let name = rec.file_name_locked.then(|| rec.file_name.clone());
+        let pending = rec.pending;
+        *rec = d.clone();
+        if let Some(dir) = dir {
+            rec.save_dir = dir;
+            rec.save_dir_locked = true;
+        }
+        if let Some(name) = name {
+            rec.file_name = name;
+            rec.file_name_locked = true;
+        }
+        rec.pending = pending;
+    });
 
     let transfer = Arc::new(Transfer {
         client: inner.client.clone(),
@@ -658,6 +771,7 @@ async fn drive(
             min_split: config.min_segment_size,
             max_retries: config.max_retries,
             retry_delay: config.retry_delay,
+            offline_retries: config.offline_retries,
         },
     });
     let progress = Arc::new(Progress::new(&segments));
@@ -700,15 +814,18 @@ async fn drive(
                 .map_err(std::io::Error::other)??;
         }
     }
+    // Where it goes now (the place may have changed while it downloaded).
+    let now = inner.get(id)?;
     let final_path = {
         let _naming = inner.naming.lock().await;
-        let wanted = d.save_dir.join(&d.file_name);
+        std::fs::create_dir_all(&now.save_dir)?;
+        let wanted = now.save_dir.join(&now.file_name);
         let target = if wanted.exists() {
-            filename::unique_path(&d.save_dir, &d.file_name)
+            filename::unique_path(&now.save_dir, &now.file_name)
         } else {
             wanted
         };
-        rename(&temp_path, &target)?;
+        move_file(&temp_path, &target)?;
         target
     };
     let final_name = final_path
@@ -728,6 +845,30 @@ async fn drive(
         d.completed_at = Some(now_ms());
     });
     Ok(())
+}
+
+/// A file download from a server that said it can't continue downloads (no byte
+/// ranges): stopping it loses what it has. (Never reached the server: unknown, so it
+/// just waits paused.)
+fn loses_progress(d: &Download) -> bool {
+    matches!(d.kind, DownloadKind::Http) && d.final_url.is_some() && !d.resumable
+}
+
+pub const PAUSED_OFFLINE: &str =
+    "Paused: the internet connection was lost. Continue it when you're back online.";
+pub const STOPPED_OFFLINE: &str = "Stopped: the internet connection was lost, and this server can't continue a download, so continuing starts it again.";
+
+/// Moves a file, also to another drive (copy, then delete).
+fn move_file(from: &Path, to: &Path) -> Result<()> {
+    match rename(from, to) {
+        Ok(()) => Ok(()),
+        Err(_) if from.exists() => {
+            std::fs::copy(from, to)?;
+            std::fs::remove_file(from)?;
+            Ok(())
+        }
+        Err(e) => Err(e),
+    }
 }
 
 fn rename(from: &Path, to: &Path) -> Result<()> {

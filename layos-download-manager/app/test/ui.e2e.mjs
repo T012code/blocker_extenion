@@ -493,6 +493,92 @@ async function layoutAndWindowTests() {
   await page.locator('#rows tr').first().waitFor();
   await page.evaluate(() => { window.__ldmCalls.length = 0; });
 
+  // IDM-style: a checked file link starts in the background, hidden from the list,
+  // and Start confirms it with the chosen name and folder.
+  await page.evaluate(() => { window.__ldmCalls.length = 0; });
+  const rowsBefore = await page.locator('#rows tr').count();
+  await page.click('#btn-add');
+  await page.fill('#add-url', 'https://mirror.example.org/fedora-41.iso');
+  await page.click('#add-check');
+  await page.locator('#add-info .early', { hasText: 'Already downloading in the background' }).waitFor();
+  const bgId = await page.evaluate(() => window.__ldmCalls.find((c) => c.cmd === 'start_background')?.args.url);
+  assert.equal(bgId, 'https://mirror.example.org/fedora-41.iso');
+  await page.waitForTimeout(300);
+  assert.equal(await page.locator('#rows tr').count(), rowsBefore, 'not in the list before it is confirmed');
+  await page.fill('#add-name', 'Fedora Workstation.iso');
+  await page.click('#add-start');
+  await page.waitForFunction(() => window.__ldmCalls.some((c) => c.cmd === 'confirm_download' && c.args.args.fileName === 'Fedora Workstation.iso' && c.args.args.start));
+  await page.locator('#rows tr', { hasText: 'Fedora Workstation.iso' }).waitFor();
+  assert.equal(await page.evaluate(() => window.__ldmCalls.some((c) => c.cmd === 'discard_download')), false);
+  console.log('ok - a checked link starts downloading in the background; Start confirms it with the chosen name');
+  // Cancelling throws the background download away.
+  await page.click('#btn-add');
+  await page.fill('#add-url', 'https://mirror.example.org/debian-13.iso');
+  await page.click('#add-check');
+  await page.locator('#add-info .early').waitFor();
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => window.__ldmCalls.some((c) => c.cmd === 'discard_download'));
+  console.log('ok - cancelling the Add window discards what it started');
+
+  // Downloaded before: the Add window says so and offers to open it instead.
+  await page.evaluate(() => { window.__ldmCalls.length = 0; });
+  await page.click('#btn-add');
+  await page.fill('#add-url', 'https://files.example.net/report-q3.pdf');
+  await page.click('#add-check');
+  await page.locator('#add-dup:not([hidden])', { hasText: 'You\'ve downloaded this before' }).waitFor();
+  assert.equal(await page.locator('#add-start').innerText(), 'Download again');
+  assert.equal(await page.locator('#add-dup-use').innerText(), 'Open it');
+  assert.equal(await page.evaluate(() => window.__ldmCalls.some((c) => c.cmd === 'start_background')), false, 'nothing starts until you decide');
+  await page.waitForTimeout(400);
+  if (shots) await page.screenshot({ path: join(shots, 'app-add-duplicate.png') });
+  await page.click('#add-dup-use');
+  await page.locator('#dlg-add[open]').waitFor({ state: 'detached' });
+  console.log('ok - a link downloaded before is caught in the Add window: open it, or download it again');
+
+  // From the browser with "ask first": items already started are confirmed or discarded.
+  const started = await page.evaluate(() => import('./backend.js').then((b) => Promise.all([
+    b.invoke('start_background', { url: 'https://cdn.example.com/a.zip' }),
+    b.invoke('start_background', { url: 'https://cdn.example.com/b.zip' }),
+  ])));
+  await page.evaluate((ids) => window.__ldmBrowserDownload([{ url: 'https://cdn.example.com/a.zip' }, { url: 'https://cdn.example.com/b.zip' }], 'capture', ids), started);
+  await page.locator('#dlg-browser[open]').waitFor();
+  await page.locator('#browser-items input').nth(1).uncheck();
+  await page.click('#browser-start');
+  await page.waitForFunction((ids) => window.__ldmCalls.some((c) => c.cmd === 'confirm_download' && c.args.id === ids[0])
+    && window.__ldmCalls.some((c) => c.cmd === 'discard_download' && c.args.id === ids[1]), started);
+  console.log('ok - downloads the browser sent (already started) are confirmed when picked, discarded when not');
+
+  // The network goes away: downloads pause and stay paused; back online, one click continues them.
+  await page.evaluate(() => window.__ldmNetwork(false));
+  await page.locator('#network-banner:not([hidden])', { hasText: 'No internet connection' }).waitFor();
+  await page.locator('#rows tr', { hasText: 'ubuntu' }).locator('.status', { hasText: 'Paused' }).waitFor();
+  await page.waitForTimeout(400);
+  if (shots) await page.screenshot({ path: join(shots, 'app-offline.png') });
+  await page.waitForTimeout(600);
+  assert.equal(await page.locator('#rows tr', { hasText: 'ubuntu' }).locator('.status').innerText(), 'Paused', 'nothing restarts by itself');
+  await page.evaluate(() => window.__ldmNetwork(true));
+  await page.locator('#network-banner:not([hidden])', { hasText: 'You\'re back online' }).waitFor();
+  await page.click('#network-continue');
+  await page.locator('#rows tr', { hasText: 'ubuntu' }).locator('.status', { hasText: 'Downloading' }).waitFor();
+  console.log('ok - offline, downloads pause and say why; back online, they continue only when asked');
+
+  // Settings: a folder for each type of file.
+  await page.click('#btn-settings');
+  await page.locator('#dlg-settings[open]').waitFor();
+  await page.click('.tab[data-tab="connection"]');
+  assert.equal(await page.locator('#type-folders input').count(), 7);
+  const music = page.locator('#type-folders input[data-category="music"]');
+  assert.match(await music.getAttribute('placeholder'), /Download Manager\\Music$/);
+  await page.locator('#type-folders .type-folder', { hasText: 'Music' }).locator('.pathfield-btn').click();
+  await page.waitForFunction(() => document.querySelector('#type-folders input[data-category="music"]').value === 'D:\\Media');
+  await page.selectOption('select[name="duplicates"]', 'existing');
+  if (shots) await page.screenshot({ path: join(shots, 'app-settings-folders.png') });
+  await page.click('#settings-save');
+  const saved2 = await page.evaluate(() => import('./backend.js').then((b) => b.invoke('get_settings')));
+  assert.deepEqual(saved2.categoryDirs, { music: 'D:\\Media' });
+  assert.equal(saved2.duplicates, 'existing');
+  console.log('ok - each type of file (Video, Music, Documents, Compressed, Programs, Torrents, General) can have its own folder');
+
   // The folder field: automatic by default, Choose… picks a folder, × goes back.
   await page.click('#btn-add');
   await page.locator('#dlg-add[open]').waitFor();
@@ -592,6 +678,19 @@ async function layoutAndWindowTests() {
   await pw.locator('#status', { hasText: 'Paused' }).waitFor();
   await pw.locator('#pause', { hasText: 'Continue' }).waitFor();
   await pw.click('#toggle');
+  // The same link came in again: the existing download's window asks what to do.
+  await pw.goto(`${base}progress.html?mock&id=4`);
+  await pw.locator('#done:not([hidden])').waitFor();
+  await pw.evaluate(() => window.__ldmDuplicate(4, { url: 'https://files.example.net/report-q3.pdf' }));
+  await pw.locator('#dup:not([hidden])', { hasText: 'You\'ve downloaded this before' }).waitFor();
+  await pw.waitForTimeout(900);
+  if (shots) await pw.screenshot({ path: join(shots, 'window-duplicate.png') });
+  await pw.check('#dup-remember');
+  await pw.click('#dup-again');
+  await pw.waitForFunction(() => window.__ldmCalls.some((c) => c.cmd === 'resolve_duplicate' && c.args.choice === 'again' && c.args.remember));
+  await pw.waitForFunction(() => window.__ldmCalls.some((c) => c.cmd === 'window_close'));
+  console.log('ok - when a link comes in again, its download\'s window offers Open it / Download again (and can remember)');
+
   // An expired download's window offers Refresh link, handled by the main window.
   await pw.goto(`${base}progress.html?mock&id=5`);
   await pw.locator('#pause', { hasText: 'Refresh link' }).click();

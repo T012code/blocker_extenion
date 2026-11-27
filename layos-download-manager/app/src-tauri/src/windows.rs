@@ -28,6 +28,9 @@ pub struct Windows {
     finished: Mutex<HashSet<i64>>,
     /// The mini window was closed: it stays away until asked for.
     mini_dismissed: Mutex<bool>,
+    /// Links that came in again, by the download they duplicate, waiting for an answer
+    /// in that download's window.
+    duplicates: Mutex<std::collections::HashMap<i64, ldm_ipc::BrowserDownload>>,
 }
 
 pub fn label(id: i64) -> String {
@@ -39,6 +42,18 @@ impl Windows {
         self.fresh.lock().unwrap().insert(id);
     }
 
+    pub fn set_duplicate(&self, id: i64, item: ldm_ipc::BrowserDownload) {
+        self.duplicates.lock().unwrap().insert(id, item);
+    }
+
+    pub fn duplicate(&self, id: i64) -> Option<ldm_ipc::BrowserDownload> {
+        self.duplicates.lock().unwrap().get(&id).cloned()
+    }
+
+    pub fn take_duplicate(&self, id: i64) -> Option<ldm_ipc::BrowserDownload> {
+        self.duplicates.lock().unwrap().remove(&id)
+    }
+
     pub fn set_mini_dismissed(&self, on: bool) {
         *self.mini_dismissed.lock().unwrap() = on;
     }
@@ -46,10 +61,17 @@ impl Windows {
     /// A download changed: open its window when it starts or finishes, and the mini
     /// window while anything downloads, as the settings say.
     pub fn updated(&self, app: &AppHandle, d: &Download, s: &AppSettings) {
+        // Started in the background for the "add download" window: nothing shows until
+        // it's confirmed.
+        if d.pending {
+            return;
+        }
         let running = matches!(
             d.status,
             DownloadStatus::Downloading | DownloadStatus::Connecting
         );
+        // A torrent waiting for the VPN gets its window too, saying so.
+        let started = running || d.status == DownloadStatus::Blocked;
         if running && s.show_mini_window && !*self.mini_dismissed.lock().unwrap() {
             let _ = show_mini(app);
         }
@@ -57,7 +79,7 @@ impl Windows {
         if !self.fresh.lock().unwrap().contains(&d.id) || d.queue_id.is_some() {
             return;
         }
-        if running
+        if started
             && s.show_progress_window
             && self.shown.lock().unwrap().insert(d.id)
             && open_count(app) < MAX_AUTO_OPEN

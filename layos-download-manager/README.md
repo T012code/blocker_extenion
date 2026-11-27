@@ -65,6 +65,33 @@ Any download can be paused and continued. Most servers allow fetching part of a 
 Until the desktop app is ready, the browser extension's toolbar pop-up lists your downloads with live progress, speed and time left, and has **Pause** and **Continue** buttons.
 
 
+### When the internet goes away
+
+If the network drops while files are downloading, every running download **pauses and keeps what it has**, with the reason in its status ("Paused: the internet connection was lost"). The app notices in two ways: Windows reports no usable network adapter (checked every 2 seconds), or a download's connections keep failing to connect (three times in a row). Nothing restarts by itself when the network is back: a banner says you're back online, and you continue the downloads (one button continues all of those paused this way). Torrents and video downloads pause the same way.
+
+The one exception is a file from a server that can't continue a download (it doesn't support byte ranges). That download can't keep what it has, so it **stops** instead and says so; continuing it starts it again.
+
+### Folders for each type of file
+
+Like IDM, downloads are sorted into folders inside the download folder: **Video, Music, Documents, Compressed, Programs, Torrents and General**. The folders are created when the app starts (and when you change the settings) if they aren't there yet; folders that already exist are used as they are, files included. In Settings → Downloads each type can have a folder of its own anywhere (× goes back to the default), and any single download can still be saved anywhere from the Add window. Turning sorting off saves everything straight into the download folder.
+
+### Downloads start straight away
+
+When the browser hands over a file, it's added and **starts at once** with its own download window, and the main window stays in the tray. If you turned on "Ask before downloading what the browser sends", the Add window shows first, but, as in IDM, the file is **already downloading in the background** while you choose the name, folder and sections. Its part file grows next to where the file would go; when you press Start it carries on, and when it finishes it is saved under the name and in the folder you chose (moved there if needed, even to another drive). Cancel, and the background download and its part file are deleted. The same happens in the app's own Add window once a link has been checked. Downloads started in the background don't show in the list (or the extension's pop-up) until you confirm them, and if the app is closed first they're cleaned up at the next start.
+
+### A link downloaded before
+
+When a link comes in that is already in the list (the same address, or the same torrent), you're asked, as in IDM, in that download's own window: **Open it** (the finished file) or **Continue it** (if it isn't finished), or **Download again**, which saves a second copy with a numbered name ("report (1).pdf"). "Do this every time" remembers the answer; Settings → Downloads changes it (ask, download again, or open/continue the one you have). The Add window says so too, before anything starts.
+
+### From a magnet link to a finished torrent
+
+1. You click a magnet link on a web page. The extension catches the click before the browser does anything and sends the link to the app (starting the app if it isn't running).
+2. The app checks whether that torrent is already in your list (by its info hash). If it is, you're asked what to do, as above.
+3. Otherwise it's added and starts at once, into the **Torrents** folder. Its download window opens and shows its progress.
+4. The torrent first fetches its metadata (the list of files) from peers, then downloads its pieces from many peers at once, the torrent's own way of fetching in parts. Pieces are checked as they arrive and kept on disk, so pausing and continuing loses nothing.
+5. With the default privacy settings, a torrent only connects to peers through your VPN or proxy. Until one is set up, its window and the list say "Waiting for VPN" instead of downloading.
+6. When it's done it's shared with others until the share ratio in Settings is reached, then stops. Its window shows "Download complete" with Open and Show in folder.
+
 ### When a link expires
 
 Many sites give out download links that only work for a while. When the server refuses a link part-way (401, 403, 404 or 410), the download is marked **Link expired** and keeps everything it has. **Refresh link** (in the details, the right-click menu, the download's window, the extension pop-up, or simply Continue) then:

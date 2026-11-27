@@ -96,11 +96,12 @@ async function start() {
   hydrateIcons();
   initTooltips();
   setExpanded(false);
-  for (const d of (await invoke('list').catch(() => [])) ?? []) downloads.set(d.id, d);
+  for (const d of (await invoke('list').catch(() => [])) ?? []) if (!d.pending) downloads.set(d.id, d);
   render();
   await listen('engine', (ev) => {
     if (ev.type === 'progress') live.set(ev.id, ev);
     else if (ev.type === 'added' || ev.type === 'updated') {
+      if (ev.download.pending) { downloads.delete(ev.download.id); render(); return; }
       downloads.set(ev.download.id, ev.download);
       if (!RUNNING.includes(ev.download.status)) live.delete(ev.download.id);
     } else if (ev.type === 'removed') { downloads.delete(ev.id); live.delete(ev.id); }

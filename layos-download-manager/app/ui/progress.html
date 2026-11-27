@@ -9,6 +9,23 @@
 </head>
 <body class="small-window">
   <main class="win" id="win" aria-live="off">
+    <!-- The same link came in again (from the browser) -->
+    <section class="pw-dup" id="dup" hidden role="alertdialog" aria-labelledby="dup-title" aria-describedby="dup-text">
+      <div class="pw-dup-head">
+        <span class="dup-mark"><i data-icon="copy"></i></span>
+        <div>
+          <strong id="dup-title">You've downloaded this before</strong>
+          <p class="muted small" id="dup-text"></p>
+        </div>
+      </div>
+      <div class="pw-actions">
+        <button class="btn primary" id="dup-existing">Open it</button>
+        <button class="btn" id="dup-again">Download again</button>
+        <span class="spacer"></span>
+        <button class="btn subtle" id="dup-dismiss">Not now</button>
+      </div>
+      <label class="check small"><input type="checkbox" id="dup-remember"><span>Do this every time</span></label>
+    </section>
     <!-- While downloading -->
     <section class="pw-running" id="running">
       <header class="pw-head">

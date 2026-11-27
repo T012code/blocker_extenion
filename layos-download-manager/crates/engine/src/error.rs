@@ -28,12 +28,37 @@ pub enum Error {
     AlreadyRunning,
     #[error("cancelled")]
     Cancelled,
+    /// The network went away (no connection, or it dropped and didn't come back).
+    #[error("the internet connection was lost")]
+    ConnectionLost,
     /// From a runner (torrent, media tool).
     #[error("{0}")]
     Other(String),
 }
 
 impl Error {
+    /// The connection itself failed (no network, dropped, timed out), as opposed to
+    /// the server answering with an error.
+    pub fn is_connection_lost(&self) -> bool {
+        match self {
+            Error::ConnectionLost => true,
+            Error::Network(e) => e.is_connect() || e.is_timeout() || e.is_request() || e.is_body(),
+            Error::Io(e) => matches!(
+                e.kind(),
+                std::io::ErrorKind::ConnectionReset
+                    | std::io::ErrorKind::ConnectionAborted
+                    | std::io::ErrorKind::ConnectionRefused
+                    | std::io::ErrorKind::NotConnected
+                    | std::io::ErrorKind::TimedOut
+                    | std::io::ErrorKind::BrokenPipe
+                    | std::io::ErrorKind::NetworkUnreachable
+                    | std::io::ErrorKind::HostUnreachable
+                    | std::io::ErrorKind::NetworkDown
+            ),
+            _ => false,
+        }
+    }
+
     /// Worth trying again after a pause (dropped connection, server overload).
     pub fn is_transient(&self) -> bool {
         match self {

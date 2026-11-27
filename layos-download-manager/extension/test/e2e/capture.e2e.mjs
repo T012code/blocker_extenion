@@ -117,6 +117,7 @@ const PAGE = `<!doctype html><title>Files</title>
     // Hold Alt (the bypass key) while clicking.
     const manual = document.getElementById('manual');
     manual.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, altKey: true }));
+    await wait(150); // a real click: the button goes down, then up
     manual.click();
   })();
 </script>`;

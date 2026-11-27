@@ -264,6 +264,9 @@ function onEngine(ev) {
   switch (ev.type) {
     case 'added':
     case 'updated':
+      // Started in the background for an "add download" window: not in the list until
+      // it's confirmed.
+      if (ev.download.pending) { downloads.delete(ev.download.id); break; }
       downloads.set(ev.download.id, ev.download);
       if (!isActive(ev.download.status)) live.delete(ev.download.id);
       break;
@@ -525,6 +528,24 @@ function bindExtras() {
       items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus();
     }
   }, true);
+  // The network went away (downloads were paused) or came back.
+  const OFFLINE = 'Paused: the internet connection was lost';
+  listen('network', (n) => {
+    const b = $('network-banner');
+    b.classList.toggle('alert', !n.online);
+    b.classList.toggle('good', !!n.online);
+    $('network-continue').hidden = !n.online || ![...downloads.values()].some((d) => d.status === 'paused' && d.error?.startsWith(OFFLINE));
+    $('network-text').textContent = !n.online
+      ? `No internet connection.${n.paused ? ` ${n.paused === 1 ? 'A download was' : `${n.paused} downloads were`} paused, keeping what they have; continue ${n.paused === 1 ? 'it' : 'them'} when you're back online.` : ''}`
+      : 'You\'re back online.';
+    b.hidden = !!n.online && $('network-continue').hidden;
+  });
+  $('network-continue').addEventListener('click', async () => {
+    const ids = [...downloads.values()].filter((d) => d.status === 'paused' && d.error?.startsWith(OFFLINE)).map((d) => d.id);
+    if (ids.length) await run(invoke('resume', { ids }), 'Couldn\'t continue');
+    $('network-banner').hidden = true;
+  });
+  $('network-close').addEventListener('click', () => { $('network-banner').hidden = true; });
   // A finished queue asked to shut the computer down: offer to cancel.
   listen('shutdown-pending', (name) => {
     $('shutdown-text').textContent = `"${name}" is done. The computer shuts down in about a minute.`;
@@ -611,7 +632,7 @@ async function start() {
   bind();
   info = { ...info, ...(await run(invoke('app_info'), 'Couldn\'t start')) };
   initDialogs();
-  for (const d of (await run(invoke('list'), 'Couldn\'t load downloads')) ?? []) downloads.set(d.id, d);
+  for (const d of (await run(invoke('list'), 'Couldn\'t load downloads')) ?? []) if (!d.pending) downloads.set(d.id, d);
   queues = (await run(invoke('queues_list'), 'Couldn\'t load queues')) ?? [];
   await listen('engine', onEngine);
   await listen('queues', (list) => { queues = list; render(); });

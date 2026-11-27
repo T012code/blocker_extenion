@@ -80,3 +80,10 @@ body.mini { user-select: none; }
 .mini-items .s { font-size: var(--text-xs); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
 .mini-items .bar { grid-column: 1 / -1; }
 .mini-items .paused .bar > span { background: var(--warning); }
+
+/* The same link came in again. */
+.pw-dup { display: grid; gap: var(--space-3); padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--rule); background: color-mix(in oklab, var(--warning) 9%, var(--card)); animation: rise-in 300ms var(--ease-out) both; }
+.pw-dup[hidden] { display: none; }
+.pw-dup-head { display: flex; gap: var(--space-3); align-items: center; }
+.pw-dup-head p { margin-top: 2px; }
+.dup-mark { width: 32px; height: 32px; display: grid; place-items: center; flex: none; border-radius: var(--radius-sm); background: color-mix(in oklab, var(--warning) 18%, var(--card)); color: var(--warning); }

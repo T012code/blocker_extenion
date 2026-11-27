@@ -71,7 +71,11 @@ async fn runner_downloads_pause_and_continue() {
         d.file_name, "Big Linux ISO",
         "name comes from the magnet link"
     );
-    assert_eq!(d.category, Category::General);
+    assert_eq!(
+        d.category,
+        Category::Torrents,
+        "torrents have their own folder"
+    );
 
     while done.load(Ordering::SeqCst) < 300 {
         tokio::time::sleep(Duration::from_millis(10)).await;

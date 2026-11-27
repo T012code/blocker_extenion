@@ -306,6 +306,7 @@ pub async fn save_settings(app: tauri::AppHandle, state: S<'_>, settings: AppSet
     let old = state.settings.lock().unwrap().clone();
     settings.save(&state.engine).map_err(err)?;
     settings.apply(&state.engine);
+    settings.ensure_folders(&state.engine);
     state.set_ask(settings.ask_for_browser_downloads);
     if old.handle_torrent_links != settings.handle_torrent_links {
         crate::associations::apply(settings.handle_torrent_links);
@@ -503,4 +504,146 @@ pub fn show_app(app: tauri::AppHandle) {
 #[tauri::command]
 pub async fn exit_app(app: tauri::AppHandle) {
     crate::exit(&app).await;
+}
+
+// ---------- downloads that start before you confirm them (as in IDM)
+
+/// The "add download" window checked a link: start it in the background, unconfirmed,
+/// so it's already downloading by the time you press Start.
+#[tauri::command]
+pub async fn start_background(state: S<'_>, url: String) -> R<i64> {
+    let url = url.trim().to_string();
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        return Err("only web links start early".into());
+    }
+    let mut new = ldm_service::to_new_download(
+        BrowserDownload {
+            url,
+            ..Default::default()
+        },
+        true,
+    );
+    new.pending = true;
+    state.engine.add(new).await.map_err(err)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfirmArgs {
+    #[serde(default)]
+    file_name: Option<String>,
+    #[serde(default)]
+    save_dir: Option<PathBuf>,
+    #[serde(default)]
+    connections: Option<u8>,
+    #[serde(default)]
+    queue_id: Option<i64>,
+    /// Start now; otherwise it waits (paused, keeping what it has, or in its queue).
+    #[serde(default)]
+    start: bool,
+}
+
+/// You confirmed a download that started in the background: it moves to the place and
+/// name you chose (when it finishes), shows in the list, and opens its window.
+#[tauri::command]
+pub async fn confirm_download(state: S<'_>, id: i64, args: ConfirmArgs) -> R<()> {
+    let d = state.engine.get(id).map_err(err)?;
+    let name = args
+        .file_name
+        .map(|n| n.trim().to_string())
+        .filter(|n| !n.is_empty() && *n != d.file_name);
+    let dir = args.save_dir.filter(|p| !p.as_os_str().is_empty());
+    if name.is_some() || dir.is_some() {
+        state.engine.set_target(id, dir, name).await.map_err(err)?;
+    }
+    if let Some(n) = args.connections.filter(|n| *n != d.connections) {
+        state.engine.set_connections(id, n).map_err(err)?;
+    }
+    if args.queue_id.is_some() || !args.start {
+        state.engine.pause(id).await.map_err(err)?;
+    }
+    state.engine.confirm(id).map_err(err)?;
+    if let Some(q) = args.queue_id {
+        state.engine.requeue(id).map_err(err)?;
+        state.queues.assign(&[id], Some(q))?;
+    }
+    Ok(())
+}
+
+/// The window was cancelled: the background download and its part file go away.
+#[tauri::command]
+pub async fn discard_download(state: S<'_>, id: i64) -> R<()> {
+    match state.engine.get(id) {
+        Ok(d) if d.pending => state.engine.remove(id, true).await.map_err(err),
+        _ => Ok(()),
+    }
+}
+
+// ---------- links downloaded before
+
+/// A download already in the list for this link, if any.
+#[tauri::command]
+pub fn find_duplicate(state: S, url: String) -> Option<Download> {
+    state.service.find_duplicate(url.trim())
+}
+
+/// The link that came in again for this download, while its window asks what to do.
+#[tauri::command]
+pub fn get_duplicate(state: S, id: i64) -> Option<BrowserDownload> {
+    state.windows.duplicate(id)
+}
+
+/// The answer: "again" adds it again under a numbered name, "existing" opens the
+/// finished file or continues the download, "dismiss" does nothing. `remember` makes
+/// it the answer from now on (Settings → Downloads).
+#[tauri::command]
+pub async fn resolve_duplicate(
+    app: tauri::AppHandle,
+    state: S<'_>,
+    id: i64,
+    choice: String,
+    remember: bool,
+) -> R<Option<i64>> {
+    let item = state.windows.take_duplicate(id);
+    let mut added = None;
+    match choice.as_str() {
+        "again" => {
+            let item = match item {
+                Some(i) => i,
+                None => {
+                    let d = state.engine.get(id).map_err(err)?;
+                    BrowserDownload {
+                        url: d.request.url,
+                        referer: d.request.referer,
+                        cookies: d.request.cookies,
+                        user_agent: d.request.user_agent,
+                        ..Default::default()
+                    }
+                }
+            };
+            added = Some(
+                state
+                    .engine
+                    .add(ldm_service::to_new_download(item, true))
+                    .await
+                    .map_err(err)?,
+            );
+        }
+        "existing" => {
+            let d = state.engine.get(id).map_err(err)?;
+            state.use_existing(&app, &d);
+        }
+        _ => {}
+    }
+    if remember && choice != "dismiss" {
+        let mut s = state.settings.lock().unwrap().clone();
+        s.duplicates = if choice == "again" {
+            crate::settings::Duplicates::Again
+        } else {
+            crate::settings::Duplicates::Existing
+        };
+        s.save(&state.engine).map_err(err)?;
+        *state.settings.lock().unwrap() = s;
+    }
+    Ok(added)
 }

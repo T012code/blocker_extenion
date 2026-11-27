@@ -4,7 +4,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Category {
     General,
@@ -13,6 +13,8 @@ pub enum Category {
     Music,
     Programs,
     Video,
+    /// Torrents go to their own folder, whatever is inside them.
+    Torrents,
 }
 
 const COMPRESSED: &[&str] = &[
@@ -48,13 +50,14 @@ const VIDEO: &[&str] = &[
 ];
 
 impl Category {
-    pub const ALL: [Category; 6] = [
+    pub const ALL: [Category; 7] = [
         Self::General,
         Self::Compressed,
         Self::Documents,
         Self::Music,
         Self::Programs,
         Self::Video,
+        Self::Torrents,
     ];
 
     pub fn from_file_name(name: &str) -> Self {
@@ -93,6 +96,7 @@ impl Category {
             Self::Music => "Music",
             Self::Programs => "Programs",
             Self::Video => "Video",
+            Self::Torrents => "Torrents",
         }
     }
 }

@@ -50,6 +50,55 @@ async function chooseFolder(input, title) {
   }
 }
 
+// ---------------------------------------------------------------- folders for each type of file
+
+const TYPE_FOLDERS = [
+  ['video', 'Video'], ['music', 'Music'], ['documents', 'Documents'], ['compressed', 'Compressed'],
+  ['programs', 'Programs'], ['torrents', 'Torrents'], ['general', 'General'],
+];
+
+/** One folder field per type: empty means the default (<download folder>\<Type>). */
+function fillTypeFolders() {
+  const box = $('type-folders');
+  const chosen = current?.categoryDirs ?? {};
+  box.replaceChildren(...TYPE_FOLDERS.map(([key, name]) => {
+    const row = document.createElement('div');
+    row.className = 'type-folder';
+    const label = document.createElement('span');
+    label.className = 'type-folder-name';
+    label.append(icon(key === 'general' ? 'general' : key), name);
+    const field = document.createElement('div');
+    field.className = 'pathfield';
+    const input = Object.assign(document.createElement('input'), { type: 'text', value: chosen[key] ?? '', spellcheck: false });
+    input.dataset.category = key;
+    input.setAttribute('aria-label', `Folder for ${name.toLowerCase()}`);
+    const clear = Object.assign(document.createElement('button'), { type: 'button', className: 'pathfield-clear', title: 'Back to the default folder' });
+    clear.append(icon('x'));
+    const choose = Object.assign(document.createElement('button'), { type: 'button', className: 'pathfield-btn' });
+    choose.append(icon('folder-open'), 'Choose…');
+    const sync = () => { clear.hidden = !input.value.trim(); };
+    input.addEventListener('input', sync);
+    clear.addEventListener('click', () => { input.value = ''; sync(); input.focus(); });
+    choose.addEventListener('click', () => chooseFolder(input, `Folder for ${name.toLowerCase()}`).then(sync));
+    sync();
+    field.append(input, clear, choose);
+    row.append(label, field);
+    return row;
+  }));
+  syncTypePlaceholders();
+}
+
+/** The default folder each type uses, shown when no folder is chosen. */
+function syncTypePlaceholders() {
+  const f = form();
+  const dir = f.downloadDir.value.trim();
+  const sep = dir.includes('\\') ? '\\' : '/';
+  for (const input of document.querySelectorAll('#type-folders input')) {
+    const name = TYPE_FOLDERS.find(([k]) => k === input.dataset.category)[1];
+    input.placeholder = f.categoryFolders.checked ? `${dir}${sep}${name}` : dir;
+  }
+}
+
 // ---------------------------------------------------------------- refresh an expired link
 
 let refreshing = null;
@@ -98,10 +147,48 @@ function closeRefresh() {
 
 // ---------------------------------------------------------------- add
 
-let addState = { media: null, torrentFile: null };
+let addState = { media: null, torrentFile: null, bg: null, bgUrl: '', dup: null };
+
+/** The download started in the background for the Add window is no longer wanted. */
+function dropBackground() {
+  if (addState.bg != null) invoke('discard_download', { id: addState.bg }).catch(() => {});
+  addState.bg = null;
+  addState.bgUrl = '';
+}
+
+/** A checked file link: if it was downloaded before, say so; otherwise start it in the
+ *  background (as IDM does) so it's already downloading when you press Start. */
+async function startEarly(url) {
+  if (addState.bgUrl === url) return;
+  dropBackground();
+  showDuplicate(null);
+  const dup = await invoke('find_duplicate', { url }).catch(() => null);
+  if ($('add-url').value.trim() !== url) return;
+  if (dup) return showDuplicate(dup);
+  try {
+    addState.bg = await invoke('start_background', { url });
+    addState.bgUrl = url;
+    $('add-info').append(Object.assign(document.createElement('div'), { className: 'muted small early', textContent: 'Already downloading in the background while you choose.' }));
+  } catch { /* it starts when you press Start */ }
+}
+
+const DONE_STATES = ['completed', 'seeding'];
+function showDuplicate(d) {
+  addState.dup = d;
+  $('add-dup').hidden = !d;
+  if (d) {
+    const done = DONE_STATES.includes(d.status);
+    $('add-dup-title').textContent = done ? 'You\'ve downloaded this before' : 'This is already in your list';
+    $('add-dup-text').textContent = `${d.fileName} · ${done ? 'finished' : 'not finished'}. Download it again to get a second copy with a numbered name.`;
+    $('add-dup-use').textContent = done ? 'Open it' : 'Continue it';
+  }
+  syncAddButtons();
+}
 
 export function openAdd({ url = '' } = {}) {
-  addState = { media: null, torrentFile: null };
+  dropBackground();
+  addState = { media: null, torrentFile: null, bg: null, bgUrl: '', dup: null };
+  showDuplicate(null);
   $('add-form').reset();
   $('add-url').value = url;
   $('add-info').hidden = true;
@@ -156,6 +243,7 @@ async function check() {
     if (looksLikeFile(url)) {
       const p = await invoke('probe', { url });
       showFile(p);
+      await startEarly(url);
     } else {
       // A web page: maybe a video. Ask for formats, fall back to a plain download.
       try {
@@ -163,6 +251,7 @@ async function check() {
         showFormats(url, f);
       } catch {
         showFile(await invoke('probe', { url }));
+        await startEarly(url);
       }
     }
   } catch (e) {
@@ -228,7 +317,14 @@ async function submitAdd(start) {
     queueId: $('add-queue').value ? Number($('add-queue').value) : null,
   };
   try {
-    await invoke('add', { args });
+    if (addState.bg != null && addState.bgUrl === url && !args.media && !args.torrentFile) {
+      // Already downloading: confirm it with what was chosen.
+      const id = addState.bg;
+      addState.bg = null;
+      await invoke('confirm_download', { id, args: { fileName: args.fileName, saveDir: args.saveDir, connections: args.connections, queueId: args.queueId, start } });
+    } else {
+      await invoke('add', { args });
+    }
     $('dlg-add').close();
     toast(args.queueId ? `Added to ${queues.find((q) => q.id === args.queueId)?.name}` : start ? 'Download started' : 'Added to the list');
   } catch (e) {
@@ -251,9 +347,14 @@ function syncBrowserCount() {
 }
 
 let browserQueue = null;
+/** Per item: the download already started in the background, if any. */
+let browserIds = [];
+let browserAnswered = false;
 
-function openBrowser({ items, source, title, note, queueId = null }) {
+function openBrowser({ items, source, title, note, queueId = null, ids = [] }) {
   browserItems = items;
+  browserIds = ids;
+  browserAnswered = false;
   browserQueue = queueId;
   const several = items.length > 1;
   $('browser-title').textContent = title ?? (several ? `Download ${items.length} files from your browser` : 'Download from your browser');
@@ -286,8 +387,23 @@ function openBrowser({ items, source, title, note, queueId = null }) {
 }
 
 async function submitBrowser(start) {
-  const picked = [...$('browser-items').querySelectorAll('input:checked')].map((c) => browserItems[Number(c.dataset.index)]);
-  for (const it of picked) {
+  browserAnswered = true;
+  const boxes = [...$('browser-items').querySelectorAll('input')];
+  // Not picked, but already started in the background: those go away.
+  for (const c of boxes.filter((b) => !b.checked)) {
+    const id = browserIds[Number(c.dataset.index)];
+    if (id != null) invoke('discard_download', { id }).catch(() => {});
+  }
+  for (const c of boxes.filter((b) => b.checked)) {
+    const i = Number(c.dataset.index);
+    const it = browserItems[i];
+    if (browserIds[i] != null) {
+      await run(invoke('confirm_download', {
+        id: browserIds[i],
+        args: { saveDir: $('browser-dir').value.trim() || null, connections: Number($('browser-sections').value) || null, queueId: browserQueue, start },
+      }), 'Couldn\'t start a download');
+      continue;
+    }
     await run(invoke('add', {
       args: {
         url: it.url, fileName: it.fileName ?? null, referer: it.referer ?? null, cookies: it.cookies ?? null,
@@ -298,7 +414,8 @@ async function submitBrowser(start) {
     }), 'Couldn\'t add a download');
   }
   $('dlg-browser').close();
-  if (picked.length) toast(`${picked.length} download${picked.length > 1 ? 's' : ''} ${start ? 'started' : 'added'}`);
+  const picked = boxes.filter((b) => b.checked).length;
+  if (picked) toast(`${picked} download${picked > 1 ? 's' : ''} ${start ? 'started' : 'added'}`);
 }
 
 // ---------------------------------------------------------------- remove
@@ -406,7 +523,10 @@ export async function openSettings(tab = 'general') {
   if (!current) return;
   const f = form();
   f.downloadDir.value = current.downloadDir;
+  f.duplicates.value = current.duplicates ?? 'ask';
+  fillTypeFolders();
   f.categoryFolders.checked = current.categoryFolders;
+  syncTypePlaceholders();
   f.askForBrowserDownloads.checked = current.askForBrowserDownloads;
   f.closeToTray.checked = current.closeToTray;
   f.minimizeToTray.checked = current.minimizeToTray;
@@ -450,6 +570,9 @@ function readSettings() {
   return {
     ...current,
     downloadDir: f.downloadDir.value.trim(),
+    duplicates: f.duplicates.value,
+    categoryDirs: Object.fromEntries([...document.querySelectorAll('#type-folders input')]
+      .map((i) => [i.dataset.category, i.value.trim()]).filter(([, v]) => v)),
     categoryFolders: f.categoryFolders.checked,
     askForBrowserDownloads: f.askForBrowserDownloads.checked,
     closeToTray: f.closeToTray.checked,
@@ -571,6 +694,24 @@ export function initDialogs() {
   $('browser-form').addEventListener('submit', (e) => { e.preventDefault(); submitBrowser(true); });
   $('browser-later').addEventListener('click', () => submitBrowser(false));
   $('browser-cancel').addEventListener('click', () => $('dlg-browser').close());
+  // Closed without an answer: downloads started in the background go away.
+  $('dlg-browser').addEventListener('close', () => {
+    if (browserAnswered) return;
+    for (const id of browserIds) if (id != null) invoke('discard_download', { id }).catch(() => {});
+    browserIds = [];
+  });
+  $('dlg-add').addEventListener('close', dropBackground);
+  $('add-url').addEventListener('input', () => {
+    if (addState.bgUrl && $('add-url').value.trim() !== addState.bgUrl) dropBackground();
+    if (addState.dup) showDuplicate(null);
+  });
+  $('add-dup-use').addEventListener('click', async () => {
+    const d = addState.dup;
+    if (!d) return;
+    if (DONE_STATES.includes(d.status)) await run(invoke('open_download', { id: d.id }), 'Couldn\'t open it');
+    else await run(invoke('resume', { ids: [d.id] }), 'Couldn\'t continue it');
+    $('dlg-add').close();
+  });
   listen('browser-download', openBrowser);
 
   // Remove
@@ -611,9 +752,11 @@ export function initDialogs() {
   for (const t of document.querySelectorAll('.tab')) t.addEventListener('click', () => showTab(t.dataset.tab));
   for (const r of form().mode) r.addEventListener('change', syncModeDetails);
   form().launchOnStartup.addEventListener('change', (e) => { form().startMinimized.disabled = !e.target.checked; });
+  form().downloadDir.addEventListener('input', syncTypePlaceholders);
+  form().categoryFolders.addEventListener('change', syncTypePlaceholders);
   $('set-browse').addEventListener('click', async () => {
     const dir = await pick({ directory: true, title: 'Download folder' });
-    if (dir) form().downloadDir.value = dir;
+    if (dir) { form().downloadDir.value = dir; syncTypePlaceholders(); }
   });
   $('set-refresh-adapters').addEventListener('click', () => loadAdapters(form().vpnInterface.value));
   $('set-test-proxy').addEventListener('click', async () => {
@@ -635,6 +778,7 @@ export function initDialogs() {
 /** "Add to list" or "Add to queue", depending on the queue picked. */
 function syncAddButtons() {
   const inQueue = !!$('add-queue').value;
+  $('add-start').textContent = addState.dup ? 'Download again' : 'Start download';
   $('add-later').textContent = inQueue ? 'Add to queue' : 'Add to list';
   $('add-start').hidden = inQueue;
   // In a queue, "Add to queue" is the only way forward, so it's the main button.

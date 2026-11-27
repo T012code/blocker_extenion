@@ -15,7 +15,9 @@ pub mod store;
 mod transfer;
 
 pub use category::Category;
-pub use engine::{Engine, EngineConfig, MAX_CONNECTIONS, SECTION_PRESETS};
+pub use engine::{
+    Engine, EngineConfig, MAX_CONNECTIONS, PAUSED_OFFLINE, SECTION_PRESETS, STOPPED_OFFLINE,
+};
 pub use error::{Error, Result};
 pub use model::*;
 pub use runner::{Job, Reporter, Runner};

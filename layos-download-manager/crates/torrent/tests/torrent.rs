@@ -194,7 +194,7 @@ async fn downloads_from_a_magnet_link_with_pause_and_continue() {
     let dir = tempfile::tempdir().unwrap();
     let src = dir.path().join("seed");
     std::fs::create_dir_all(&src).unwrap();
-    let content = data(4 * 1024 * 1024, 11);
+    let content = data(24 * 1024 * 1024, 11); // big enough to pause part-way, even locally
     std::fs::write(src.join("film.mkv"), &content).unwrap();
     // Share slowly so there's time to pause.
     let seeder = seed(&src.join("film.mkv"), Some(1024 * 1024)).await;
@@ -221,7 +221,7 @@ async fn downloads_from_a_magnet_link_with_pause_and_continue() {
             ..
         })) = tokio::time::timeout(Duration::from_secs(1), events.recv()).await
             && pid == id
-            && downloaded > 512 * 1024
+            && downloaded > 256 * 1024
         {
             break;
         }

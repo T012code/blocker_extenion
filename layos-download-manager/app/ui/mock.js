@@ -19,6 +19,8 @@ function fillQueues() {
 let settings = {
   downloadDir: 'C:\\Users\\Layo\\Downloads\\Layó\'s Download Manager',
   categoryFolders: true,
+  categoryDirs: {},
+  duplicates: 'ask',
   defaultConnections: 8,
   globalSpeedLimit: 0,
   askForBrowserDownloads: false,
@@ -262,6 +264,46 @@ export async function invoke(cmd, args) {
       window.__ldmCalls.push({ cmd, args: structuredClone(args) });
       emit('refresh-request', args.id);
       return null;
+    case 'start_background': {
+      const d = make({ url: args.url, start: true, size: 64 * 1024 * 1024 });
+      d.pending = true;
+      update(d, { pending: true });
+      window.__ldmCalls.push({ cmd, args: structuredClone(args) });
+      return d.id;
+    }
+    case 'confirm_download': {
+      const d = downloads.get(args.id);
+      const a = args.args;
+      window.__ldmCalls.push({ cmd, args: structuredClone(args) });
+      update(d, {
+        pending: false,
+        fileName: a.fileName || d.fileName,
+        saveDir: a.saveDir || d.saveDir,
+        connections: a.connections || d.connections,
+        queueId: a.queueId ?? null,
+        status: a.queueId ? 'queued' : a.start ? d.status : 'paused',
+      });
+      return null;
+    }
+    case 'discard_download': {
+      window.__ldmCalls.push({ cmd, args: structuredClone(args) });
+      const d = downloads.get(args.id);
+      if (d?.pending) { downloads.delete(d.id); emit('engine', { type: 'removed', id: d.id }); }
+      return null;
+    }
+    case 'find_duplicate': {
+      const cut = (u) => (u || '').split('#')[0];
+      return [...downloads.values()].filter((d) => !d.pending).find((d) => cut(d.request.url) === cut(args.url)) ?? null;
+    }
+    case 'get_duplicate': return dupItems.get(args.id) ?? null;
+    case 'resolve_duplicate': {
+      window.__ldmCalls.push({ cmd, args: structuredClone(args) });
+      const item = dupItems.get(args.id);
+      dupItems.delete(args.id);
+      if (args.remember && args.choice !== 'dismiss') settings.duplicates = args.choice;
+      if (args.choice === 'again') return make({ url: item?.url ?? downloads.get(args.id).request.url, start: true }).id;
+      return null;
+    }
     case 'get': { const d = downloads.get(args.id); if (!d) throw new Error('no such download'); return { ...d, live: undefined }; }
     case 'open_download_window': case 'show_mini': case 'mini_dismiss': case 'window_hide': case 'window_close':
     case 'window_size': case 'window_title': case 'show_app': case 'exit_app':
@@ -281,6 +323,23 @@ export async function pick({ directory }) {
   return directory ? 'D:\\Media' : 'C:\\Users\\Layo\\Downloads\\linux.torrent';
 }
 
+const dupItems = new Map();
+/** For tests: the browser sent a link that's already in the list. */
+window.__ldmDuplicate = (id, item) => { dupItems.set(id, item); emit('duplicate', id); };
+/** For tests: the network went away (downloads pause) or came back. */
+window.__ldmNetwork = (online) => {
+  let paused = 0;
+  if (!online) {
+    for (const d of downloads.values()) {
+      if (d.status !== 'downloading') continue;
+      paused++;
+      delete d.live;
+      update(d, { status: 'paused', error: 'Paused: the internet connection was lost. Continue it when you\'re back online.' });
+    }
+  }
+  emit('network', online ? { online: true } : { online: false, paused });
+};
+
 /** For tests: the browser sent the fresh link an expired download was waiting for. */
 window.__ldmFreshLink = (id) => {
   const d = downloads.get(id);
@@ -289,4 +348,4 @@ window.__ldmFreshLink = (id) => {
 };
 
 /** For tests: pretend the browser sent downloads. */
-window.__ldmBrowserDownload = (items, source = 'capture') => emit('browser-download', { items, source });
+window.__ldmBrowserDownload = (items, source = 'capture', ids = []) => emit('browser-download', { items, source, ids });

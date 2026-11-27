@@ -56,6 +56,8 @@ pub(crate) struct TransferOptions {
     /// Failed attempts in a row (without progress) before a connection gives up.
     pub max_retries: u32,
     pub retry_delay: Duration,
+    /// Connection failures in a row (no network) before the download pauses.
+    pub offline_retries: u32,
 }
 
 pub(crate) struct Transfer {
@@ -330,6 +332,8 @@ enum StreamEnd {
 
 async fn fetch_segment(t: &Transfer, p: &Progress, i: usize) -> Result<Exit> {
     let mut failures = 0u32;
+    // Connection failures in a row without any progress: the network is probably gone.
+    let mut lost = 0u32;
     loop {
         if t.cancel.is_cancelled() {
             return Err(Error::Cancelled);
@@ -348,6 +352,13 @@ async fn fetch_segment(t: &Transfer, p: &Progress, i: usize) -> Result<Exit> {
         };
         let progressed = p.segs.lock().unwrap()[i].seg.pos > from;
         failures = if progressed { 0 } else { failures + 1 };
+        lost = match &err {
+            Some(e) if e.is_connection_lost() && !progressed => lost + 1,
+            _ => 0,
+        };
+        if lost > t.options.offline_retries {
+            return Err(Error::ConnectionLost);
+        }
         if failures > t.options.max_retries {
             return Err(err.unwrap_or(Error::Io(std::io::Error::new(
                 std::io::ErrorKind::UnexpectedEof,

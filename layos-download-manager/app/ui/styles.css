@@ -194,6 +194,24 @@ body.resizing-x, body.resizing-x * { cursor: col-resize !important; user-select:
 .banner.alert { background: color-mix(in oklab, var(--danger) 9%, var(--paper)); }
 .banner.alert .icon { color: var(--danger); }
 .queuebar > .icon { color: var(--ink-muted); }
+.banner.good { background: color-mix(in oklab, var(--success) 12%, var(--paper)); }
+.banner.good .icon { color: var(--success); }
+.banner .net-on, .banner.alert .net-on, .banner.good .net-off { display: none; }
+.banner.good .net-on { display: block; }
+/* Downloaded before (Add a download). */
+.dup-note { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3); border-radius: var(--radius-sm); background: color-mix(in oklab, var(--warning) 12%, var(--card)); animation: fade-in var(--dur-base) var(--ease-out); }
+.dup-note[hidden] { display: none; }
+.dup-mark { width: 32px; height: 32px; display: grid; place-items: center; flex: none; border-radius: var(--radius-sm); background: color-mix(in oklab, var(--warning) 18%, var(--card)); color: var(--warning); }
+.dup-body { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.early { margin-top: var(--space-1); }
+/* Settings: a folder per type of file. */
+.type-folders { display: grid; gap: var(--space-2); margin-left: var(--space-6); }
+.type-folders[hidden] { display: none; }
+.type-folder { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: var(--space-3); align-items: center; }
+.type-folder-name { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); font-weight: 560; }
+.type-folder-name .icon { color: var(--ink-muted); }
+.type-folder .pathfield { height: 36px; }
+.type-folder .pathfield input[type=text] { padding-left: var(--space-3); }
 .banner:not([hidden]), .queuebar:not([hidden]) { animation: strip-in var(--dur-base) var(--ease-out); }
 @keyframes strip-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 .queuebar { background: var(--surface); }
