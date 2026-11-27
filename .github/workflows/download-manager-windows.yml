@@ -3,6 +3,10 @@ name: Download manager (Windows)
 
 on:
   push:
+    branches: ["**"]
+    # Pushing a tag like ldm-v0.2.0 also publishes a GitHub release (path filters
+    # don't apply to tags).
+    tags: ["ldm-v*"]
     paths: ["layos-download-manager/**", ".github/workflows/download-manager-windows.yml"]
   pull_request:
     paths: ["layos-download-manager/**"]
@@ -14,6 +18,9 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      # Writing is needed only to publish a release from an ldm-v* tag.
+      contents: write
     timeout-minutes: 45
     defaults:
       run:
@@ -80,3 +87,33 @@ jobs:
             layos-download-manager/target/release/bundle/nsis/*.exe
             layos-download-manager/extension/dist/*.zip
           if-no-files-found: error
+
+      # ---- Release: only for tags like ldm-v0.2.0, and only if the tag matches the app.
+      - name: Check the tag matches the app version
+        if: startsWith(github.ref, 'refs/tags/ldm-v')
+        shell: pwsh
+        run: |
+          $version = (Get-Content app/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          $tag = "${{ github.ref_name }}".Substring(5)
+          if ($tag -ne $version) { throw "Tag ldm-v$tag doesn't match the app version $version" }
+          if (-not (Test-Path "docs/releases/$version.md")) { throw "Missing release notes docs/releases/$version.md" }
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Gather the release files (plain names; GitHub mangles spaces and ’)
+        if: startsWith(github.ref, 'refs/tags/ldm-v')
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release | Out-Null
+          $setup = Get-ChildItem target/release/bundle/nsis/*_x64-setup.exe | Select-Object -First 1
+          Copy-Item $setup.FullName "release/LayosDownloadManager_${env:VERSION}_x64-setup.exe"
+          Copy-Item extension/dist/*.zip release/
+          Get-ChildItem release | Format-Table Name, Length
+
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/ldm-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Layó's Download Manager ${{ env.VERSION }}
+          body_path: layos-download-manager/docs/releases/${{ env.VERSION }}.md
+          files: layos-download-manager/release/*
+          fail_on_unmatched_files: true
