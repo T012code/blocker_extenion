@@ -152,7 +152,10 @@ try {
 
       // Group remove: everything finished at once.
       await page.click('.nav-item[data-filter="all"]');
-      await page.locator('#rows tr.completed').first().waitFor({ timeout: 60_000 });
+      // Make sure something has finished (without waiting on the simulated speed).
+      const runningId = await page.$eval('#rows tr.downloading', (r) => Number(r.dataset.id)).catch(() => null);
+      if (runningId != null) await page.evaluate((id) => window.__ldmComplete(id), runningId);
+      await page.locator('#rows tr.completed').first().waitFor();
       const finishedIds = await page.$$eval('#rows tr.completed', (rows) => rows.map((r) => r.dataset.id));
       const finishedBefore = finishedIds.length;
       await page.click('#btn-delete');

@@ -335,6 +335,13 @@ export async function pick({ directory }) {
   return directory ? 'D:\\Media' : 'C:\\Users\\Layo\\Downloads\\linux.torrent';
 }
 
+/** For tests: this download finishes now (so tests don't wait on simulated speed). */
+window.__ldmComplete = (id) => {
+  const d = downloads.get(id);
+  delete d.live;
+  update(d, { status: 'completed', downloaded: d.size, completedAt: Date.now() });
+};
+
 const dupItems = new Map();
 /** For tests: the browser sent a link that's already in the list. */
 window.__ldmDuplicate = (id, item) => { dupItems.set(id, item); emit('duplicate', id); };
