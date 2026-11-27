@@ -2,7 +2,8 @@
 //   dist/chromium  Chrome, Edge, Opera, Brave, Vivaldi
 //   dist/firefox   Firefox 128+
 // With --zip, also writes store-ready zips next to them.
-// With --store, leaves out the development "key" (the stores give their own id).
+// With --store, also writes dist/chromium-store without the development "key" (the
+// stores give their own id), for submitting to the Chrome Web Store and Edge Add-ons.
 
 import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -34,9 +35,14 @@ if (iconsOld !== icons) {
   console.log('updated src/shared/icons.js from ../app/ui/icons.js');
 }
 
-function chromium() {
+/**
+ * Chromium build. The key fixes the extension's id, which the installed bridge trusts,
+ * so the build for loading unpacked ("Developer mode → Load unpacked") keeps it;
+ * `forStore` leaves it out (the stores give their own id).
+ */
+function chromium(forStore = false) {
   const m = structuredClone(base);
-  if (store) delete m.key;
+  if (forStore) delete m.key;
   return m;
 }
 
@@ -51,7 +57,9 @@ function firefox() {
 }
 
 rmSync(dist, { recursive: true, force: true });
-for (const [name, manifest] of [['chromium', chromium()], ['firefox', firefox()]]) {
+const builds = [['chromium', chromium()], ['firefox', firefox()]];
+if (store) builds.splice(1, 0, ['chromium-store', chromium(true)]);
+for (const [name, manifest] of builds) {
   const out = join(dist, name);
   mkdirSync(out, { recursive: true });
   cpSync(src, out, { recursive: true, filter: (p) => !p.endsWith('manifest.json') });

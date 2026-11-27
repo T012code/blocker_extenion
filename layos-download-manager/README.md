@@ -8,9 +8,29 @@ A free download manager for Windows. It speeds up downloads by fetching each fil
 
 ## Installing on Windows
 
-The installer (`Layó's Download Manager_x.y.z_x64-setup.exe`, built by GitHub Actions) installs for the current user, with no admin rights needed. It includes the app, the browser bridge, yt-dlp and ffmpeg, and registers the bridge with Chrome, Edge, Firefox, Opera, Brave and Vivaldi. Uninstalling removes all of that, the magnet and `.torrent` associations, and the start-with-Windows entry. Then add the browser extension from `extension/dist`.
+### 1. The app
+
+Download the latest build from the repository's **Actions** tab: open the newest successful "Download manager (Windows)" run and download the `layos-download-manager-windows` artifact (a zip). Inside are:
+
+| File | What it is |
+| --- | --- |
+| `Layó’s Download Manager_x.y.z_x64-setup.exe` | The installer |
+| `layos-download-manager-chromium-x.y.z.zip` | The extension for Chrome, Edge, Brave, Opera and Vivaldi |
+| `layos-download-manager-firefox-x.y.z.zip` | The extension for Firefox |
+| `layos-download-manager-chromium-store-x.y.z.zip` | For submitting to the Chrome Web Store / Edge Add-ons (not for installing by hand) |
+
+Run the installer. It installs for the current user, with no admin rights needed. It includes the app, the browser bridge, yt-dlp and ffmpeg, and registers the bridge with Chrome, Edge, Firefox, Opera, Brave and Vivaldi. Uninstalling (Settings → Apps) removes all of that, the magnet and `.torrent` associations, and the start-with-Windows entry.
 
 Windows may show "Windows protected your PC" the first time, because the installer isn't code-signed yet: click **More info → Run anyway**. On Windows 10 and 11, if another torrent app is already chosen for magnet links, Windows asks which app to use the first time you open one.
+
+### 2. The browser extension
+
+Until the extension is in the browsers' stores, it's added by hand:
+
+- **Chrome, Edge, Brave, Opera, Vivaldi:** unzip `layos-download-manager-chromium-x.y.z.zip` into a folder you'll keep (for example `Documents\Layó's Download Manager extension`). Open the browser's extensions page (`chrome://extensions`, `edge://extensions`, `brave://extensions`, `opera://extensions`, `vivaldi:extensions`), turn on **Developer mode**, click **Load unpacked**, and choose that folder. Don't delete the folder afterwards.
+- **Firefox:** Firefox only installs signed extensions permanently. Until it's signed on addons.mozilla.org, open `about:debugging#/runtime/this-firefox`, click **Load Temporary Add-on…** and choose the zip (it stays until Firefox closes). Firefox Developer Edition and Nightly can install it permanently with `xpinstall.signatures.required` set to `false` in `about:config`.
+
+Click the extension's toolbar button: it should say **Connected** (or **Ready** when the app isn't running yet; it starts when a download comes in). From then on, downloads in that browser go to the download manager.
 
 ## How the multi-section download works
 
