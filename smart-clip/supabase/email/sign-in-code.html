@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
+  <title>Your Smart Clip sign-in code</title>
+  <style>
+    body { margin: 0; padding: 0; background: #eef3fb; }
+    a { color: #2866ee; }
+    @media (prefers-color-scheme: dark) {
+      .bg { background: #080e1b !important; }
+      .card { background: #111a2f !important; border-color: #24304a !important; }
+      .ink { color: #edf2f8 !important; }
+      .muted { color: #a9b6cc !important; }
+      .codebox { background: #0b1324 !important; border-color: #2f4fa8 !important; }
+      .code { color: #9cc8ff !important; }
+      .rule { border-color: #24304a !important; }
+    }
+    @media (max-width: 520px) {
+      .card-pad { padding: 28px 22px !important; }
+      .code { font-size: 34px !important; letter-spacing: 8px !important; }
+    }
+  </style>
+</head>
+<body class="bg" style="margin:0;padding:0;background:#eef3fb;">
+  <!-- Preview line in the inbox -->
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;">
+    Your Smart Clip code is {{ .Token }}. It works for 15 minutes.&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;
+  </div>
+  <table role="presentation" class="bg" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eef3fb;">
+    <tr>
+      <td align="center" style="padding:40px 16px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;">
+          <!-- Brand -->
+          <tr>
+            <td style="padding:0 4px 20px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td width="36" height="36" align="center" valign="middle" style="width:36px;height:36px;background:#2866ee;border-radius:9px;font:700 18px/36px 'Segoe UI',Arial,sans-serif;color:#ffffff;">&#10022;</td>
+                  <td class="ink" style="padding-left:10px;font:700 19px/1 'Segoe UI',Arial,sans-serif;color:#111a2f;letter-spacing:-0.2px;">Smart Clip</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <!-- Card -->
+          <tr>
+            <td class="card card-pad" style="background:#ffffff;border:1px solid #dbe4f3;border-radius:12px;padding:36px 36px 32px;">
+              <h1 class="ink" style="margin:0 0 10px;font:700 24px/1.25 'Segoe UI',Arial,sans-serif;color:#111a2f;letter-spacing:-0.3px;">Your sign-in code</h1>
+              <p class="muted" style="margin:0 0 26px;font:400 15px/1.55 'Segoe UI',Arial,sans-serif;color:#4a5872;">Type this code in Smart Clip to sign in on your PC. Your clips will be there in a moment.</p>
+              <!-- The code -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td class="codebox" align="center" style="background:#f2f6ff;border:1px solid #c9d8fb;border-radius:8px;padding:22px 12px;">
+                    <div class="code" style="font:700 40px/1 Consolas,'Cascadia Mono','Courier New',monospace;letter-spacing:12px;color:#1b47d3;padding-left:12px;">{{ .Token }}</div>
+                  </td>
+                </tr>
+              </table>
+              <p class="muted" style="margin:18px 0 0;font:400 14px/1.55 'Segoe UI',Arial,sans-serif;color:#4a5872;">
+                The code works <strong class="ink" style="color:#111a2f;">once</strong>, for <strong class="ink" style="color:#111a2f;">15&nbsp;minutes</strong>.
+              </p>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:26px;">
+                <tr><td class="rule" style="border-top:1px solid #e3e9f4;font-size:0;line-height:0;">&nbsp;</td></tr>
+              </table>
+              <p class="muted" style="margin:20px 0 0;font:400 13px/1.6 'Segoe UI',Arial,sans-serif;color:#4a5872;">
+                <strong class="ink" style="color:#111a2f;">Didn't ask for this?</strong> You can ignore this email: nobody can sign in without the code.
+                Never share it. Smart Clip will never ask you for it by phone, chat or email.
+              </p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="padding:22px 4px 0;">
+              <p class="muted" style="margin:0;font:400 12px/1.6 'Segoe UI',Arial,sans-serif;color:#6b7891;">
+                Smart Clip: your clipboard on all your PCs. Copy on one, paste on another.<br>
+                Developed by <a href="https://layothedeveloper.com" style="color:#2866ee;text-decoration:none;font-weight:600;">Lay&oacute;</a>.
+                This email was sent to {{ .Email }}.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
