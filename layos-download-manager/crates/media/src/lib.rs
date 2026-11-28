@@ -128,52 +128,6 @@ fn playlist_from(json: &serde_json::Value) -> Playlist {
     }
 }
 
-#[cfg(test)]
-mod playlist_tests {
-    use super::*;
-
-    #[test]
-    fn finds_the_playlist_of_a_video_page() {
-        assert_eq!(
-            playlist_url(
-                "https://www.youtube.com/watch?v=jNQXAC9IVRw&list=PLBCF2DAC6FFB574DE&index=2"
-            )
-            .as_deref(),
-            Some("https://www.youtube.com/playlist?list=PLBCF2DAC6FFB574DE")
-        );
-        assert_eq!(
-            playlist_url("https://youtube.com/playlist?list=PLx-_9").as_deref(),
-            Some("https://www.youtube.com/playlist?list=PLx-_9")
-        );
-        assert_eq!(playlist_url("https://www.youtube.com/watch?v=x"), None);
-        assert_eq!(
-            playlist_url("https://www.youtube.com/watch?v=x&list=RDx"),
-            None,
-            "mixes never end"
-        );
-        assert_eq!(playlist_url("https://example.com/watch?list=PL1"), None);
-        assert_eq!(
-            playlist_url("https://www.youtube.com/watch?v=x&list=a%22b"),
-            None
-        );
-    }
-
-    #[test]
-    fn lists_entries_and_skips_private_ones() {
-        let p = playlist_from(
-            &serde_json::json!({"_type": "playlist", "title": "Stories", "entries": [
-                {"_type": "url", "url": "https://www.youtube.com/watch?v=a", "title": "A", "duration": 90.0},
-                {"_type": "url", "url": "https://www.youtube.com/watch?v=b", "title": "[Private video]"},
-                {"_type": "url", "url": "https://www.youtube.com/watch?v=c", "title": null}
-            ]}),
-        );
-        assert_eq!(p.title, "Stories");
-        assert_eq!(p.entries.len(), 2);
-        assert_eq!(p.entries[0].title.as_deref(), Some("A"));
-        assert_eq!(p.entries[1].url, "https://www.youtube.com/watch?v=c");
-    }
-}
-
 pub use runner::MediaRunner;
 pub use tools::Tools;
 
@@ -237,4 +191,50 @@ async fn formats_once(
     }
     let json: serde_json::Value = serde_json::from_slice(&out.stdout)?;
     Ok(choices::from_info(&json))
+}
+
+#[cfg(test)]
+mod playlist_tests {
+    use super::*;
+
+    #[test]
+    fn finds_the_playlist_of_a_video_page() {
+        assert_eq!(
+            playlist_url(
+                "https://www.youtube.com/watch?v=jNQXAC9IVRw&list=PLBCF2DAC6FFB574DE&index=2"
+            )
+            .as_deref(),
+            Some("https://www.youtube.com/playlist?list=PLBCF2DAC6FFB574DE")
+        );
+        assert_eq!(
+            playlist_url("https://youtube.com/playlist?list=PLx-_9").as_deref(),
+            Some("https://www.youtube.com/playlist?list=PLx-_9")
+        );
+        assert_eq!(playlist_url("https://www.youtube.com/watch?v=x"), None);
+        assert_eq!(
+            playlist_url("https://www.youtube.com/watch?v=x&list=RDx"),
+            None,
+            "mixes never end"
+        );
+        assert_eq!(playlist_url("https://example.com/watch?list=PL1"), None);
+        assert_eq!(
+            playlist_url("https://www.youtube.com/watch?v=x&list=a%22b"),
+            None
+        );
+    }
+
+    #[test]
+    fn lists_entries_and_skips_private_ones() {
+        let p = playlist_from(
+            &serde_json::json!({"_type": "playlist", "title": "Stories", "entries": [
+                {"_type": "url", "url": "https://www.youtube.com/watch?v=a", "title": "A", "duration": 90.0},
+                {"_type": "url", "url": "https://www.youtube.com/watch?v=b", "title": "[Private video]"},
+                {"_type": "url", "url": "https://www.youtube.com/watch?v=c", "title": null}
+            ]}),
+        );
+        assert_eq!(p.title, "Stories");
+        assert_eq!(p.entries.len(), 2);
+        assert_eq!(p.entries[0].title.as_deref(), Some("A"));
+        assert_eq!(p.entries[1].url, "https://www.youtube.com/watch?v=c");
+    }
 }
