@@ -160,7 +160,7 @@ window.__ldmCalls = [];
 export async function invoke(cmd, args) {
   await new Promise((r) => setTimeout(r, 30));
   switch (cmd) {
-    case 'app_info': return { version: '0.2.2', ytdlp: true, ffmpeg: true, maxConnections: 64, sectionPresets: [1, 2, 4, 8, 16, 24, 32, 48, 64] };
+    case 'app_info': return { version: '1.0.0', ytdlp: true, ffmpeg: true, maxConnections: 64, sectionPresets: [1, 2, 4, 8, 16, 24, 32, 48, 64] };
     case 'list': return [...downloads.values()].map((d) => ({ ...d, live: undefined }));
     case 'add': {
       const a = args.args;

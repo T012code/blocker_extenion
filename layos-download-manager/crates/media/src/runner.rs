@@ -15,7 +15,6 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use crate::tools::{self, CookieFile, Tools};
 
 const PROGRESS: &str = "LDMPROG";
-const DONE: &str = "LDMDONE";
 
 pub struct MediaRunner {
     tools: Tools,
@@ -67,6 +66,8 @@ impl MediaRunner {
         std::fs::create_dir_all(&work)?;
         std::fs::create_dir_all(&d.save_dir)?;
 
+        let done_file = work.join("saved-as.txt");
+        let _ = std::fs::remove_file(&done_file);
         let mut req = d.request.clone();
         req.url = spec.page_url.clone();
         let cookies = if plain {
@@ -88,15 +89,24 @@ impl MediaRunner {
             .arg("-P")
             .arg(format!("temp:{}", work.display()))
             .arg("-o")
-            .arg(output_template(spec.title.as_deref()))
+            .arg(output_template(spec.title.as_deref(), spec.item))
             .arg("--progress-template")
             .arg(format!(
                 "download:{PROGRESS} %(info.format_id)s %(progress.downloaded_bytes)s %(progress.total_bytes)s %(progress.total_bytes_estimate)s %(progress.speed)s"
             ))
-            .arg("--print")
-            .arg(format!("after_move:{DONE} %(filepath)s"));
+            // Where the file ended up, written as UTF-8 to a file of its own. (Printed to
+            // the console instead, Windows would encode it in its old code page, which
+            // garbles names with “quotes”, accents or emoji.)
+            .arg("--print-to-file")
+            .arg("after_move:%(filepath)s")
+            .arg(&done_file);
         if let Some(ffmpeg) = &self.tools.ffmpeg {
             cmd.arg("--ffmpeg-location").arg(ffmpeg);
+        }
+        // One video of a post with several.
+        if let Some(n) = spec.item {
+            cmd.args(["--yes-playlist", "--playlist-items"])
+                .arg(n.to_string());
         }
         if d.speed_limit > 0 {
             cmd.arg("-r").arg(d.speed_limit.to_string());
@@ -113,9 +123,9 @@ impl MediaRunner {
         let stdout = child.stdout.take().unwrap();
         let stderr = child.stderr.take().unwrap();
         let errors = tokio::spawn(async move {
-            let mut lines = BufReader::new(stderr).lines();
+            let mut reader = BufReader::new(stderr);
             let mut all = String::new();
-            while let Ok(Some(l)) = lines.next_line().await {
+            while let Some(l) = next_line(&mut reader).await {
                 all.push_str(&l);
                 all.push('\n');
             }
@@ -123,27 +133,24 @@ impl MediaRunner {
         });
 
         job.report.set_status(DownloadStatus::Downloading);
-        let mut lines = BufReader::new(stdout).lines();
+        let mut lines = BufReader::new(stdout);
         // Each format (e.g. video, then audio) reports its own byte counts.
         let mut parts: HashMap<String, (u64, Option<u64>)> = HashMap::new();
-        let mut final_path: Option<PathBuf> = None;
         loop {
             tokio::select! {
                 _ = job.cancel.cancelled() => {
                     let _ = child.kill().await;
                     return Err(Error::Cancelled);
                 }
-                line = lines.next_line() => match line? {
+                line = next_line(&mut lines) => match line {
                     Some(l) => {
-                        if let Some(rest) = l.strip_prefix(PROGRESS) {
-                            if let Some((fid, done, total, speed)) = parse_progress(rest) {
-                                parts.insert(fid, (done, total));
-                                let downloaded = parts.values().map(|p| p.0).sum();
-                                let size = parts.values().map(|p| p.1).sum::<Option<u64>>();
-                                job.report.progress(downloaded, size, speed);
-                            }
-                        } else if let Some(p) = l.strip_prefix(DONE) {
-                            final_path = Some(PathBuf::from(p.trim()));
+                        if let Some(rest) = l.strip_prefix(PROGRESS)
+                            && let Some((fid, done, total, speed)) = parse_progress(rest)
+                        {
+                            parts.insert(fid, (done, total));
+                            let downloaded = parts.values().map(|p| p.0).sum();
+                            let size = parts.values().map(|p| p.1).sum::<Option<u64>>();
+                            job.report.progress(downloaded, size, speed);
                         }
                     }
                     None => break,
@@ -155,7 +162,15 @@ impl MediaRunner {
         if !status.success() {
             return Err(Error::Other(stderr));
         }
-        let path = final_path
+        let path = std::fs::read_to_string(&done_file)
+            .ok()
+            .and_then(|t| {
+                t.lines()
+                    .rev()
+                    .map(str::trim)
+                    .find(|l| !l.is_empty())
+                    .map(PathBuf::from)
+            })
             .ok_or_else(|| Error::Other("yt-dlp finished without saving a file".into()))?;
         let size = std::fs::metadata(&path).map(|m| m.len()).ok();
         let name = path
@@ -179,8 +194,13 @@ impl MediaRunner {
 }
 
 /// The file name: the page's title when the browser sent one (stream playlists often
-/// have meaningless names like "index"), otherwise the title the site reports.
-fn output_template(title: Option<&str>) -> String {
+/// have meaningless names like "index"), otherwise the title the site reports. The
+/// videos of a post with several are numbered, so they don't overwrite each other.
+fn output_template(title: Option<&str>, item: Option<u32>) -> String {
+    let number = item
+        .filter(|n| *n > 1)
+        .map(|n| format!(" ({n})"))
+        .unwrap_or_default();
     match title.map(str::trim).filter(|t| !t.is_empty()) {
         Some(t) => {
             let safe = ldm_engine::filename::sanitize(t)
@@ -188,9 +208,23 @@ fn output_template(title: Option<&str>) -> String {
                 .take(150)
                 .collect::<String>();
             // % starts a field in yt-dlp templates.
-            format!("{}.%(ext)s", safe.replace('%', "%%"))
+            format!("{}{number}.%(ext)s", safe.replace('%', "%%"))
         }
-        None => "%(title).150B.%(ext)s".to_string(),
+        None => format!("%(title).150B{number}.%(ext)s"),
+    }
+}
+
+/// The next line of a tool's output, read as UTF-8 where it can be: one odd byte
+/// (a name in Windows' old code page) must not stop the download.
+async fn next_line<R: tokio::io::AsyncBufRead + Unpin>(r: &mut R) -> Option<String> {
+    let mut buf = Vec::new();
+    match r.read_until(b'\n', &mut buf).await {
+        Ok(0) | Err(_) => None,
+        Ok(_) => Some(
+            String::from_utf8_lossy(&buf)
+                .trim_end_matches(['\r', '\n'])
+                .to_string(),
+        ),
     }
 }
 
@@ -231,11 +265,14 @@ mod tests {
     #[test]
     fn names_files_after_the_page() {
         assert_eq!(
-            output_template(Some("Live: show 100%")),
+            output_template(Some("Live: show 100%"), None),
             "Live_ show 100%%.%(ext)s"
         );
-        assert_eq!(output_template(Some("  ")), "%(title).150B.%(ext)s");
-        assert_eq!(output_template(None), "%(title).150B.%(ext)s");
+        assert_eq!(output_template(Some("  "), None), "%(title).150B.%(ext)s");
+        assert_eq!(output_template(None, None), "%(title).150B.%(ext)s");
+        assert_eq!(output_template(Some("Post"), Some(1)), "Post.%(ext)s");
+        assert_eq!(output_template(Some("Post"), Some(3)), "Post (3).%(ext)s");
+        assert_eq!(output_template(None, Some(2)), "%(title).150B (2).%(ext)s");
     }
 
     #[test]

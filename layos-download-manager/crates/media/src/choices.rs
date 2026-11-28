@@ -17,6 +17,10 @@ pub struct MediaChoice {
     pub height: Option<u32>,
     /// Bytes, exact or estimated. `None` when unknown (live streams, some sites).
     pub size: Option<u64>,
+    /// Which video of a post with several (an Instagram carousel, an X post with
+    /// many videos), counting from 1. `None` for a page with one video.
+    #[serde(default)]
+    pub item: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -133,11 +137,43 @@ pub(crate) fn from_info(info: &Value) -> MediaInfo {
             .get("is_live")
             .and_then(Value::as_bool)
             .unwrap_or(false),
-        choices: build_choices_from(&formats),
+        choices: if formats.is_empty() {
+            from_entries(info)
+        } else {
+            build_choices_from(&formats)
+        },
     }
 }
 
 /// Public for tests and other callers that already have yt-dlp's JSON.
+/// A post with several videos comes as a list: one set of choices per video, each
+/// labelled with its number ("Video 2 · 720p MP4").
+fn from_entries(info: &Value) -> Vec<MediaChoice> {
+    let Some(entries) = info.get("entries").and_then(Value::as_array) else {
+        return Vec::new();
+    };
+    let videos: Vec<(u32, Vec<MediaChoice>)> = entries
+        .iter()
+        .enumerate()
+        .take(20)
+        .map(|(i, e)| (i as u32 + 1, from_info(e).choices))
+        .filter(|(_, c)| !c.is_empty())
+        .collect();
+    let several = videos.len() > 1;
+    videos
+        .into_iter()
+        .flat_map(|(n, choices)| {
+            choices.into_iter().map(move |mut c| {
+                c.item = Some(n);
+                if several {
+                    c.label = format!("Video {n} · {}", c.label);
+                }
+                c
+            })
+        })
+        .collect()
+}
+
 pub fn build_choices(info: &Value) -> Vec<MediaChoice> {
     from_info(info).choices
 }
@@ -215,6 +251,7 @@ fn build_choices_from(formats: &[Format]) -> Vec<MediaChoice> {
             ext,
             height: Some(h),
             size,
+            item: None,
         });
     }
     // Plain files (no height known) still deserve an entry.
@@ -231,6 +268,7 @@ fn build_choices_from(formats: &[Format]) -> Vec<MediaChoice> {
             ext: v.ext.clone(),
             height: None,
             size: v.size,
+            item: None,
         });
     }
     if let Some(a) = best_audio {
@@ -241,6 +279,7 @@ fn build_choices_from(formats: &[Format]) -> Vec<MediaChoice> {
             ext: a.ext.clone(),
             height: None,
             size: a.size,
+            item: None,
         });
     }
     out
@@ -257,6 +296,31 @@ fn same_height(h: u32) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn a_post_with_several_videos_lists_each() {
+        let video = |id: &str| {
+            json!({"title": "Video", "formats": [
+                {"format_id": id, "ext": "mp4", "height": 720, "vcodec": "avc1", "acodec": "mp4a", "tbr": 900}
+            ]})
+        };
+        let info = json!({"_type": "playlist", "title": "Post by someone", "entries": [video("a"), json!({"title": "photo"}), video("b")]});
+        let c = from_info(&info).choices;
+        assert_eq!(c.len(), 2);
+        assert_eq!(c[0].label, "Video 1 · 720p MP4");
+        assert_eq!(c[0].item, Some(1));
+        assert_eq!(c[1].label, "Video 3 · 720p MP4");
+        assert_eq!(
+            c[1].item,
+            Some(3),
+            "numbered as in the post, photos counted"
+        );
+
+        let one = json!({"_type": "playlist", "title": "Post", "entries": [video("a")]});
+        let c = from_info(&one).choices;
+        assert_eq!(c[0].label, "720p MP4", "no number for a single video");
+        assert_eq!(c[0].item, Some(1));
+    }
 
     #[test]
     fn one_entry_per_height_with_merged_audio() {

@@ -479,17 +479,30 @@ pub async fn show_mini(app: tauri::AppHandle, state: S<'_>) -> R<()> {
 
 /// The mini window's close button: hide it until it's asked for again.
 #[tauri::command]
-pub fn mini_dismiss(state: S, window: tauri::WebviewWindow) -> R<()> {
+pub async fn mini_dismiss(state: S<'_>, window: tauri::WebviewWindow) -> R<()> {
     state.windows.set_mini_dismissed(true);
-    // Closed, not hidden: a hidden window still holds its web view in memory.
-    window.close().map_err(err)
+    close_later(window);
+    Ok(())
+}
+
+/// Closes a window once the command that asked for it has returned.
+///
+/// Closed, not hidden: a hidden window still holds its web view in memory. But never
+/// from inside the window's own call, on the main thread: on Windows that destroys
+/// the web view while it's still handling the call, and the whole app goes down.
+fn close_later(window: tauri::WebviewWindow) {
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let _ = window.close();
+    });
 }
 
 /// The mini window closes itself when nothing is downloading (it opens again with the
 /// next download). Closed, not hidden, so it gives its memory back.
 #[tauri::command]
-pub fn window_hide(window: tauri::WebviewWindow) -> R<()> {
-    window.close().map_err(err)
+pub async fn window_hide(window: tauri::WebviewWindow) -> R<()> {
+    close_later(window);
+    Ok(())
 }
 
 /// The main window's page has loaded: the events that waited for it.
@@ -499,8 +512,9 @@ pub fn main_ready(inbox: State<'_, crate::state::MainInbox>) -> Vec<(String, ser
 }
 
 #[tauri::command]
-pub fn window_close(window: tauri::WebviewWindow) -> R<()> {
-    window.close().map_err(err)
+pub async fn window_close(window: tauri::WebviewWindow) -> R<()> {
+    close_later(window);
+    Ok(())
 }
 
 /// A small window switching between its full and one-line forms.

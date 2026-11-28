@@ -158,6 +158,7 @@ async fn downloads_a_chosen_quality_with_pause_and_continue() {
         .add(NewDownload {
             request: RequestInfo::new(&master),
             kind: DownloadKind::Media(MediaSpec {
+                item: None,
                 page_url: master.clone(),
                 format: Some(small.format.clone()),
                 label: Some(small.label.clone()),
@@ -215,4 +216,59 @@ async fn downloads_a_chosen_quality_with_pause_and_continue() {
         assert_eq!(h, 180, "the chosen quality was downloaded");
     }
     assert!(!work.exists(), "work folder is cleaned up");
+}
+
+/// Titles from social posts: quotes, colons, emoji, accents. The saved file must be
+/// found and named after them (an X post's title once left downloads stuck at 100%).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn names_with_quotes_and_emoji_finish() {
+    let Some(tools) = tools() else { return };
+    let ffmpeg = tools.ffmpeg.clone().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let stream = dir.path().join("stream");
+    std::fs::create_dir_all(&stream).unwrap();
+    make_hls(&stream, &ffmpeg, 4);
+    let server = StaticServer::start(stream.clone()).await;
+    let master = server.url("master.m3u8");
+    let info = ldm_media::formats(&tools, &RequestInfo::new(&master), Duration::from_secs(60))
+        .await
+        .unwrap();
+    let choice = info.choices[0].clone();
+
+    let engine = Engine::open(EngineConfig::new(dir.path().join("Downloads"))).unwrap();
+    engine.set_runner(
+        "media",
+        MediaRunner::new(tools.clone(), dir.path().join("media-work")),
+    );
+    let title = "Moniepoint Group on X: “Moniepoint Inc has acquired Orda” 🚀 — café / X";
+    let id = engine
+        .add(NewDownload {
+            request: RequestInfo::new(&master),
+            kind: DownloadKind::Media(MediaSpec {
+                item: None,
+                page_url: master.clone(),
+                format: Some(choice.format.clone()),
+                label: Some(choice.label.clone()),
+                title: Some(title.into()),
+            }),
+            start: true,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    wait_status(&engine, id, DownloadStatus::Completed, 60).await;
+    let d = engine.get(id).unwrap();
+    assert!(
+        d.file_name.contains("“Moniepoint Inc has acquired Orda”"),
+        "{}",
+        d.file_name
+    );
+    assert!(d.file_name.contains('🚀'), "{}", d.file_name);
+    let path = d.save_dir.join(&d.file_name);
+    assert!(path.is_file(), "{} should exist", path.display());
+    assert_eq!(d.size, Some(std::fs::metadata(&path).unwrap().len()));
+    assert!(
+        !dir.path().join("media-work").join(id.to_string()).exists(),
+        "work folder cleaned up"
+    );
 }

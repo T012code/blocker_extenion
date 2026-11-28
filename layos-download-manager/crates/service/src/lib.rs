@@ -307,6 +307,7 @@ impl Service {
                         ext: c.ext,
                         height: c.height,
                         size: c.size,
+                        item: c.item,
                     })
                     .collect(),
             },
@@ -517,6 +518,7 @@ pub fn to_new_download(item: BrowserDownload, start: bool) -> NewDownload {
             format: m.format.clone(),
             label: m.label.clone(),
             title: m.title.clone(),
+            item: m.item,
         })
     } else {
         DownloadKind::Http

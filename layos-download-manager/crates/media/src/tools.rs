@@ -61,6 +61,8 @@ impl Tools {
 /// A yt-dlp command, with the JavaScript runtime it needs for YouTube.
 pub(crate) fn ytdlp_command(tools: &Tools) -> Result<tokio::process::Command> {
     let mut cmd = command(tools.ytdlp()?);
+    // Output in UTF-8, not Windows' old code page, so titles and names come through whole.
+    cmd.env("PYTHONIOENCODING", "utf-8").env("PYTHONUTF8", "1");
     if let Some(deno) = &tools.deno {
         let mut arg = std::ffi::OsString::from("deno:");
         arg.push(deno.as_os_str());
@@ -180,6 +182,43 @@ pub(crate) fn add_request_args(
     }
 }
 
+/// Plain words for the usual ways a site turns the request down.
+fn site_refused(msg: &str) -> Option<&'static str> {
+    let m = msg.to_ascii_lowercase();
+    if m.contains("429")
+        || m.contains("too many requests")
+        || m.contains("rate-limit")
+        || m.contains("rate limit")
+    {
+        Some("The site is limiting requests right now. Wait a minute, then continue the download.")
+    } else if m.contains("not a bot") {
+        Some(
+            "The site wants to check you're not a bot. Open the video in your browser (signed in), then try again.",
+        )
+    } else if m.contains("ip address is blocked")
+        || m.contains("not available in your country")
+        || m.contains("geo restrict")
+    {
+        Some("The site doesn't offer this video where you are.")
+    } else if m.contains("private video") || m.contains("this video is private") {
+        Some("This video is private.")
+    } else if m.contains("--cookies")
+        || m.contains("login required")
+        || m.contains("logged-in")
+        || m.contains("log in")
+        || m.contains("sign in")
+        || m.contains("authentication")
+    {
+        Some(
+            "The site wants you signed in for this video. Sign in to it in your browser, then try again from the page.",
+        )
+    } else if m.contains("no video") && m.contains("found") {
+        Some("No video was found in this post.")
+    } else {
+        None
+    }
+}
+
 /// yt-dlp found no format it could use. Often caused by the browser's cookies or user
 /// agent (they make the site answer differently), so it's worth one more try without.
 pub(crate) fn is_format_error(msg: &str) -> bool {
@@ -202,6 +241,8 @@ pub(crate) fn last_error(stderr: &str) -> String {
         "No downloadable video was found at this address.".to_string()
     } else if msg.to_lowercase().contains("drm") {
         "This video is protected (DRM) and can't be downloaded.".to_string()
+    } else if let Some(friendly) = site_refused(msg) {
+        friendly.to_string()
     } else if is_format_error(msg) {
         "The site offered no format that can be downloaded. Try again in a moment; if it keeps happening, the video downloader may need an update.".to_string()
     } else {
@@ -251,6 +292,35 @@ mod request_tests {
         assert!(has_own_clients("https://m.youtube.com/watch?v=x"));
         assert!(!has_own_clients("https://notyoutube.com/x"));
         assert!(!has_own_clients("https://vimeo.com/1"));
+    }
+
+    #[test]
+    fn site_refusals_in_plain_words() {
+        for (raw, want) in [
+            (
+                "[Instagram] x: Unable to download webpage: HTTP Error 429: Too Many Requests",
+                "limiting requests",
+            ),
+            (
+                "[youtube] x: Sign in to confirm you’re not a bot. Use --cookies-from-browser",
+                "not a bot",
+            ),
+            (
+                "[TikTok] 1: Your IP address is blocked from accessing this post",
+                "where you are",
+            ),
+            (
+                "[Reddit] x: Account authentication is required. Use --cookies-from-browser or --cookies",
+                "signed in",
+            ),
+            (
+                "[vimeo] 1: The web client only works when logged-in. Use --cookies",
+                "signed in",
+            ),
+        ] {
+            let got = last_error(&format!("ERROR: {raw}"));
+            assert!(got.contains(want), "{raw} -> {got}");
+        }
     }
 
     #[test]

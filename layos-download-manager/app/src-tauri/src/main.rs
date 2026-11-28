@@ -180,7 +180,11 @@ fn main() {
                     if state.settings.lock().unwrap().minimize_to_tray
                         && window.is_minimized().unwrap_or(false) =>
                 {
-                    let _ = window.destroy();
+                    // Not from inside the window's own event: once it's handled.
+                    let w = window.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let _ = w.destroy();
+                    });
                 }
                 _ => {}
             }

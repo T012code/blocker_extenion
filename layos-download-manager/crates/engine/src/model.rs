@@ -104,6 +104,9 @@ pub struct MediaSpec {
     pub label: Option<String>,
     #[serde(default)]
     pub title: Option<String>,
+    /// Which video of a post with several (an Instagram carousel), counting from 1.
+    #[serde(default)]
+    pub item: Option<u32>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

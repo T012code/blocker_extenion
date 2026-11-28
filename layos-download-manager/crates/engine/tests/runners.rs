@@ -100,6 +100,7 @@ async fn media_downloads_are_sorted_and_missing_runner_fails_clearly() {
         .add(NewDownload {
             request: RequestInfo::new("https://video.example/watch?v=1"),
             kind: DownloadKind::Media(MediaSpec {
+                item: None,
                 page_url: "https://video.example/watch?v=1".into(),
                 title: Some("Cat: the movie?".into()),
                 label: Some("Audio only (M4A)".into()),

@@ -115,7 +115,7 @@ export async function siteChoices({ pageUrl, incognito }) {
       label: c.label,
       size: c.size ?? null,
       kind: c.kind,
-      action: { type: 'media', pageUrl, format: c.format, label: c.label },
+      action: { type: 'media', pageUrl, format: c.format, label: c.label, item: c.item ?? null },
     })),
   };
 }
@@ -133,7 +133,7 @@ export async function download({ action, title, pageUrl, incognito }) {
     });
   } else {
     item = await describe({ url: action.pageUrl, referrer: pageUrl, incognito, pageUrl, description: title });
-    item.media = { pageUrl: action.pageUrl, format: action.format ?? null, label: action.label ?? null, title: title || null };
+    item.media = { pageUrl: action.pageUrl, format: action.format ?? null, label: action.label ?? null, title: title || null, item: action.item ?? null };
   }
   const r = await native.send({ type: 'download', source: 'media', ask: false, items: [item] });
   await addHistory({ name: title || baseName(item.url), url: item.url, status: 'sent' });

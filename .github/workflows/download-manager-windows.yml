@@ -4,7 +4,7 @@ name: Download manager (Windows)
 on:
   push:
     branches: ["**"]
-    # Pushing a tag like ldm-v0.2.0 also publishes a GitHub release (path filters
+    # Pushing a tag like ldm-v1.0.0 also publishes a GitHub release (path filters
     # don't apply to tags). So does running it by hand with "release" ticked.
     tags: ["ldm-v*"]
     paths: ["layos-download-manager/**", ".github/workflows/download-manager-windows.yml"]
@@ -114,7 +114,7 @@ jobs:
             layos-download-manager/extension/dist/*.zip
           if-no-files-found: error
 
-      # ---- Release: for a pushed tag like ldm-v0.2.0 (which must match the app's version),
+      # ---- Release: for a pushed tag like ldm-v1.0.0 (which must match the app's version),
       # or a manual run with "release" ticked (the tag ldm-v<version> is created on this commit).
       - name: Check the version for the release
         if: startsWith(github.ref, 'refs/tags/ldm-v') || inputs.release
@@ -148,3 +148,19 @@ jobs:
           body_path: layos-download-manager/docs/releases/${{ env.VERSION }}.md
           files: layos-download-manager/release/*
           fail_on_unmatched_files: true
+
+      # Only the newest release stays: older ldm-v* releases and their tags go.
+      - name: Remove older releases
+        if: startsWith(github.ref, 'refs/tags/ldm-v') || inputs.release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $current = "ldm-v${env:VERSION}"
+          $tags = gh release list --repo "${{ github.repository }}" --limit 100 --json tagName --jq '.[].tagName'
+          foreach ($t in $tags) {
+            if ($t -like 'ldm-v*' -and $t -ne $current) {
+              gh release delete $t --repo "${{ github.repository }}" --cleanup-tag --yes
+              "removed $t"
+            }
+          }

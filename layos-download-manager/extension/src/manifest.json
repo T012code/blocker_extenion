@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Layó's Download Manager",
   "short_name": "Layó's DM",
-  "version": "0.2.2",
+  "version": "1.0.0",
   "description": "Sends your downloads, videos and torrents to Layó's Download Manager: faster multi-section downloads that pause and continue.",
   "minimum_chrome_version": "116",
   "permissions": [

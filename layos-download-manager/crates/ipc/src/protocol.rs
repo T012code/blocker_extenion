@@ -58,6 +58,9 @@ pub struct MediaPick {
     pub label: Option<String>,
     #[serde(default)]
     pub title: Option<String>,
+    /// Which video of a post with several, counting from 1.
+    #[serde(default)]
+    pub item: Option<u32>,
 }
 
 /// One entry of the video button's menu.
@@ -71,6 +74,9 @@ pub struct MediaFormatChoice {
     pub ext: String,
     pub height: Option<u32>,
     pub size: Option<u64>,
+    /// Which video of a post with several, counting from 1.
+    #[serde(default)]
+    pub item: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
