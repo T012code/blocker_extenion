@@ -696,19 +696,21 @@ async function layoutAndWindowTests() {
     const row = page.locator('#rows tr', { hasText: 'ubuntu' });
     await row.click();
     await row.locator('.status', { hasText: 'Downloading' }).waitFor();
-    assert.equal(await page.isDisabled('#btn-stop'), false);
+    // The toolbar follows the selection on the next frame.
+    await page.waitForFunction(() => !document.getElementById('btn-stop').disabled, null, { timeout: 5000 });
     assert.match(await tipFor('#btn-stop'), /Stop: ends the download/);
     await page.click('#btn-stop');
     await row.locator('.status', { hasText: 'Stopped' }).waitFor();
     assert.ok(await page.evaluate(() => window.__ldmCalls.some((c) => c.cmd === 'stop')));
-    assert.equal(await page.isDisabled('#btn-stop'), true, 'already stopped');
-    assert.equal(await page.isDisabled('#btn-resume'), false, 'Continue starts it again');
+    await page.waitForFunction(() => document.getElementById('btn-stop').disabled, null, { timeout: 5000 });
+    await page.waitForFunction(() => !document.getElementById('btn-resume').disabled, null, { timeout: 5000 });
     // Still in the list, under "Not finished".
     await page.click('.nav-item[data-filter="stopped"]');
     await row.waitFor();
     await page.click('.nav-item[data-filter="all"]');
     // The right-click menu has Stop too.
     await row.click();
+    await page.waitForFunction(() => !document.getElementById('btn-resume').disabled, null, { timeout: 5000 });
     await page.click('#btn-resume');
     await row.locator('.status', { hasText: 'Downloading' }).waitFor();
     await row.click({ button: 'right' });
