@@ -96,7 +96,7 @@ pub fn read() -> Option<Captured> {
     if available(CF_UNICODETEXT.0 as u32) {
         let raw = bytes(CF_UNICODETEXT.0 as u32)?;
         let units: Vec<u16> =
-            raw.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).take_while(|&u| u != 0).collect();
+            raw.as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes(*c)).take_while(|&u| u != 0).collect();
         return Some(Captured::Text(String::from_utf16_lossy(&units)));
     }
     let image = if available(format("PNG")) {
