@@ -289,6 +289,64 @@ async fn pause_and_resume_keeps_progress() {
     );
 }
 
+/// Stop ends a download for good: it stays in the list with what it has, a queue
+/// doesn't start it again, a restart keeps it stopped; Continue still finishes it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn stop_keeps_what_it_has_and_only_continue_restarts_it() {
+    let data = test_data(3 * MB);
+    let server = TestServer::start(
+        data.clone(),
+        ServerOptions {
+            throttle: Some(400_000),
+            ..Default::default()
+        },
+    )
+    .await;
+    let dir = tempfile::tempdir().unwrap();
+    let mut cfg = config(dir.path());
+    cfg.db_path = Some(dir.path().join("ldm.db"));
+    let engine = Engine::open(cfg.clone()).unwrap();
+    let id = engine
+        .add(new_download(server.url("/f.bin")))
+        .await
+        .unwrap();
+    wait_bytes(&engine, id, 600_000).await;
+    engine.stop(id).await.unwrap();
+    let stopped = engine.get(id).unwrap();
+    assert_eq!(stopped.status, DownloadStatus::Stopped);
+    assert!(!engine.is_running(id));
+    assert!(stopped.downloaded > 0 && stopped.downloaded < data.len() as u64);
+    assert!(
+        stopped.temp_path.as_ref().unwrap().exists(),
+        "keeps what it has"
+    );
+
+    // A queue starting its downloads leaves a stopped one alone.
+    engine.requeue(id).unwrap();
+    assert_eq!(engine.get(id).unwrap().status, DownloadStatus::Stopped);
+
+    // Still stopped after the app restarts.
+    drop(engine);
+    let engine = Engine::open(cfg).unwrap();
+    assert_eq!(engine.get(id).unwrap().status, DownloadStatus::Stopped);
+
+    // Continue (on purpose) finishes it from where it stopped.
+    server.set_options(|o| o.throttle = None);
+    engine.start(id).unwrap();
+    let d = wait_status(
+        &engine,
+        id,
+        DownloadStatus::Completed,
+        Duration::from_secs(30),
+    )
+    .await;
+    assert_eq!(read(&d), data);
+
+    // Stopping a finished download changes nothing.
+    engine.stop(id).await.unwrap();
+    assert_eq!(engine.get(id).unwrap().status, DownloadStatus::Completed);
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn survives_an_app_restart() {
     let data = test_data(2 * MB);

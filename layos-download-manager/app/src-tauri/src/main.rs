@@ -196,6 +196,7 @@ fn main() {
             commands::probe,
             commands::media_formats,
             commands::pause,
+            commands::stop,
             commands::resume,
             commands::pause_all,
             commands::resume_all,

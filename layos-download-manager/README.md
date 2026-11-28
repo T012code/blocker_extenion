@@ -146,6 +146,11 @@ Many sites give out download links that only work for a while. When the server r
 3. or you paste a new link yourself.
 
 If the file behind the new link turns out to be a different size, the download starts over rather than mixing two files.
+
+### Stop
+
+**Stop** (toolbar, right-click menu, the download's own window, the extension's pop-up) ends a download you no longer want, without removing it: it stays in the list as *Stopped*, keeping what it has. Unlike Pause, nothing starts it again by itself: not its queue, not the internet coming back, not a restart. **Continue** still starts it again if you change your mind; **Remove** takes it off the list. A torrent that's sharing stops sharing. Stopped downloads are under *Not finished* in the side bar.
+
 ## The app
 
 The main window lists your downloads with their progress, speed and time left. Categories on the left (Video, Music, Documents, Compressed, Programs, Torrents) and a search box narrow the list. Select a download to see its **live section map**: one strip per section, filled as it downloads, with a lime marker where each connection is working. You can change its **number of sections while it runs**.

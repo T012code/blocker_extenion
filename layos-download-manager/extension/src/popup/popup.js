@@ -97,6 +97,19 @@ function row(d) {
     }
     btn.addEventListener('click', () => toggle(d.id, what));
   }
+  // Stop: ends it for good (it stays in the app's list; Continue starts it again).
+  if (what && d.status !== 'seeding' && d.status !== 'stopped') {
+    const stop = document.createElement('button');
+    stop.className = 'act';
+    stop.textContent = 'Stop';
+    stop.title = 'Ends the download. It stays in the list with what it has; Continue starts it again.';
+    stop.disabled = busy.has(d.id);
+    stop.addEventListener('click', () => toggle(d.id, 'stop'));
+    const acts = document.createElement('span');
+    acts.className = 'acts';
+    acts.append(btn, stop);
+    btn = acts;
+  }
 
   const bar = document.createElement('div');
   bar.className = 'bar';
@@ -147,7 +160,7 @@ function row(d) {
 const LOOK = {
   downloading: ['downloading', 'neutral'], connecting: ['connecting', 'neutral'], queued: ['queued', 'neutral'],
   completed: ['done', 'good'], seeding: ['seeding', 'good'],
-  paused: ['paused', 'held'], blocked: ['vpn', 'held'], needsRefresh: ['expired', 'held'],
+  paused: ['paused', 'held'], blocked: ['vpn', 'held'], needsRefresh: ['expired', 'held'], stopped: ['stop-circle', 'neutral'],
   failed: ['failed', 'bad'],
 };
 function stateOf(d) {
@@ -178,7 +191,7 @@ async function toggle(id, what) {
         await api.tabs.create({ url: r.pageUrl });
       }
     } else {
-      await ask({ type: what === 'pause' ? 'pause' : 'resume', id });
+      await ask({ type: what === 'pause' ? 'pause' : what === 'stop' ? 'stop' : 'resume', id });
     }
   } catch (e) {
     $('status-detail').textContent = `Couldn't ${what}: ${e.message}`;

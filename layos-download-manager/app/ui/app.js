@@ -2,7 +2,7 @@
 // the toolbar. Dialogs are in dialogs.js.
 
 import { invoke, listen, replay } from './backend.js';
-import { action, bytes, eta, percent, speed } from './format.js';
+import { action, bytes, canStop, eta, percent, speed } from './format.js';
 import { initDialogs, openAdd, openRefresh, openDeleteQueue, openGrab, openQueue, openRemove, openSchedule, openSettings } from './dialogs.js';
 import { hydrateIcons, icon } from './icons.js';
 import { initLayout } from './layout.js';
@@ -55,7 +55,7 @@ function matches(d) {
   switch (filter) {
     case 'active': if (!isActive(d.status)) return false; break;
     case 'done': if (d.status !== 'completed' && d.status !== 'seeding') return false; break;
-    case 'stopped': if (!['paused', 'failed', 'needsRefresh', 'queued'].includes(d.status)) return false; break;
+    case 'stopped': if (!['paused', 'stopped', 'failed', 'needsRefresh', 'queued'].includes(d.status)) return false; break;
     case 'torrents': if (!isTorrent(d)) return false; break;
     case 'all': break;
     default:
@@ -181,6 +181,7 @@ function renderToolbar() {
   const sel = selectedDownloads();
   $('btn-resume').disabled = !sel.some((d) => action(d.status) === 'continue');
   $('btn-pause').disabled = !sel.some((d) => action(d.status) === 'pause');
+  $('btn-stop').disabled = !sel.some((d) => canStop(d.status));
   // Remove is always available: it can also clear finished or failed downloads.
   $('btn-delete').disabled = downloads.size === 0;
 }
@@ -297,6 +298,12 @@ async function pauseSelected() {
   if (ids.length) await run(invoke('pause', { ids }), 'Couldn\'t pause');
 }
 
+/** Stop: ends the downloads for good. They stay in the list; only Continue starts them again. */
+async function stopSelected() {
+  const ids = selectedDownloads().filter((d) => canStop(d.status)).map((d) => d.id);
+  if (ids.length) await run(invoke('stop', { ids }), 'Couldn\'t stop');
+}
+
 function onRowClick(e) {
   const tr = e.target.closest('tr[data-id]');
   if (!tr) return;
@@ -377,6 +384,7 @@ function openRowMenu(x, y) {
   }
   items.push(menuItem('Continue', resumeSelected, { disabled: !canGo, kbd: 'Ctrl+R', ico: 'play' }));
   items.push(menuItem('Pause', pauseSelected, { disabled: !canPause, kbd: 'Ctrl+P', ico: 'pause' }));
+  items.push(menuItem('Stop', stopSelected, { disabled: !sel.some((d) => canStop(d.status)), ico: 'stop' }));
   if (queues.length) {
     items.push(document.createElement('hr'));
     for (const q of queues) {
@@ -590,6 +598,7 @@ function bind() {
   $('btn-add').addEventListener('click', () => openAdd());
   $('btn-resume').addEventListener('click', resumeSelected);
   $('btn-pause').addEventListener('click', pauseSelected);
+  $('btn-stop').addEventListener('click', stopSelected);
   $('btn-delete').addEventListener('click', () => openRemove(selectedDownloads()));
   $('btn-delete').disabled = false;
   $('btn-pause-all').addEventListener('click', () => run(invoke('pause_all'), 'Couldn\'t pause'));

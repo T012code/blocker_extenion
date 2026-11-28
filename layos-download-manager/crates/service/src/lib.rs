@@ -173,6 +173,10 @@ impl Service {
                 Ok(()) => Response::Ok,
                 Err(e) => Response::error(e.to_string()),
             },
+            Request::Stop { id } => match self.engine.stop(id).await {
+                Ok(()) => Response::Ok,
+                Err(e) => Response::error(e.to_string()),
+            },
             Request::Resume { id } => match self.engine.start(id) {
                 Ok(()) => Response::Ok,
                 Err(e) => Response::error(e.to_string()),
@@ -677,6 +681,7 @@ fn status_name(s: DownloadStatus) -> &'static str {
         DownloadStatus::NeedsRefresh => "needsRefresh",
         DownloadStatus::Blocked => "blocked",
         DownloadStatus::Seeding => "seeding",
+        DownloadStatus::Stopped => "stopped",
     }
 }
 

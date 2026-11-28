@@ -116,6 +116,9 @@ pub enum Request {
     List,
     /// Pause a running download. It keeps what it has, if the server can resume.
     Pause { id: i64 },
+    /// Stop a download for good: it stays in the list, keeps what it has, and only
+    /// starts again when asked to.
+    Stop { id: i64 },
     /// Continue a paused, failed or waiting download.
     Resume { id: i64 },
     /// Which formats can be downloaded from this page or stream? `item.url` is the page

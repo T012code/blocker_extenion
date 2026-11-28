@@ -18,7 +18,7 @@
         <button class="nav-item active" data-filter="all" title="All downloads"><span class="label"><i data-icon="all"></i><span class="text">All downloads</span></span><span class="count" data-count="all"></span></button>
         <button class="nav-item" data-filter="active" title="Active"><span class="label"><i data-icon="active"></i><span class="text">Active</span></span><span class="count" data-count="active"></span></button>
         <button class="nav-item" data-filter="done" title="Finished"><span class="label"><i data-icon="finished"></i><span class="text">Finished</span></span><span class="count" data-count="done"></span></button>
-        <button class="nav-item" data-filter="stopped" title="Paused and failed"><span class="label"><i data-icon="stopped"></i><span class="text">Paused and failed</span></span><span class="count" data-count="stopped"></span></button>
+        <button class="nav-item" data-filter="stopped" title="Not finished"><span class="label"><i data-icon="stopped"></i><span class="text">Not finished</span></span><span class="count" data-count="stopped"></span></button>
         <p class="nav-head">Categories</p>
         <button class="nav-item" data-filter="video" title="Video"><span class="label"><i data-icon="video"></i><span class="text">Video</span></span><span class="count" data-count="video"></span></button>
         <button class="nav-item" data-filter="music" title="Music"><span class="label"><i data-icon="music"></i><span class="text">Music</span></span><span class="count" data-count="music"></span></button>
@@ -53,6 +53,7 @@
         <div class="group" role="group" aria-label="Selected downloads">
           <button class="btn" id="btn-resume" disabled title="Continue (Ctrl+R)"><i data-icon="play"></i><span class="label">Continue</span></button>
           <button class="btn" id="btn-pause" disabled title="Pause (Ctrl+P)"><i data-icon="pause"></i><span class="label">Pause</span></button>
+          <button class="btn" id="btn-stop" disabled title="Stop: ends the download (it stays in the list; Continue starts it again)"><i data-icon="stop"></i><span class="label">Stop</span></button>
           <button class="btn" id="btn-delete" disabled title="Remove from list (Delete)"><i data-icon="trash"></i><span class="label">Remove</span></button>
         </div>
         <button class="btn subtle" id="btn-more" aria-haspopup="menu" aria-expanded="false" title="All downloads: continue or pause all, grab files from a site, remove finished">

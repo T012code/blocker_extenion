@@ -30,8 +30,13 @@ export function percent(done, size) {
 /** What a download can do now, as the pop-up shows it. */
 export function action(status) {
   if (status === 'downloading' || status === 'connecting' || status === 'seeding' || status === 'blocked') return 'pause';
-  if (status === 'paused' || status === 'failed' || status === 'queued' || status === 'needsRefresh') return 'continue';
+  if (status === 'paused' || status === 'failed' || status === 'queued' || status === 'needsRefresh' || status === 'stopped') return 'continue';
   return null;
+}
+
+/** Whether a download can be stopped: anything not finished or already stopped. */
+export function canStop(status) {
+  return status !== 'completed' && status !== 'stopped';
 }
 
 export const STATUS_TEXT = {
@@ -39,6 +44,7 @@ export const STATUS_TEXT = {
   connecting: 'Connecting',
   downloading: 'Downloading',
   paused: 'Paused',
+  stopped: 'Stopped',
   completed: 'Done',
   failed: 'Failed',
   needsRefresh: 'Link expired',

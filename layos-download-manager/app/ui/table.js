@@ -15,6 +15,7 @@ export const STATUS_LOOK = {
   completed: { icon: 'done', tone: 'good' },
   seeding: { icon: 'seeding', tone: 'good' },
   paused: { icon: 'paused', tone: 'held' },
+  stopped: { icon: 'stop-circle', tone: 'neutral' },
   blocked: { icon: 'vpn', tone: 'held' },
   needsRefresh: { icon: 'expired', tone: 'held' },
   failed: { icon: 'failed', tone: 'bad' },
@@ -90,7 +91,7 @@ export const COLUMNS = [
   { key: 'folder', label: 'Folder', width: 220, text: (d) => d.saveDir, sort: (d) => d.saveDir },
   { key: 'address', label: 'Address', width: 200, text: (d) => host(d.request?.url ?? ''), sort: (d) => host(d.request?.url ?? '') },
 ];
-const STATUS_ORDER = ['downloading', 'connecting', 'seeding', 'blocked', 'queued', 'paused', 'needsRefresh', 'failed', 'completed'];
+const STATUS_ORDER = ['downloading', 'connecting', 'seeding', 'blocked', 'queued', 'paused', 'stopped', 'needsRefresh', 'failed', 'completed'];
 export const DEFAULT_VISIBLE = ['type', 'name', 'size', 'progress', 'speed', 'eta', 'status'];
 
 function fraction(d, c) {

@@ -691,6 +691,34 @@ async function layoutAndWindowTests() {
   await page.click('#settings-cancel');
   console.log('ok - About shows the name, version, developer and contact email only');
 
+  // Stop: ends a download for good. It stays in the list as "Stopped"; Continue starts it again.
+  {
+    const row = page.locator('#rows tr', { hasText: 'ubuntu' });
+    await row.click();
+    await row.locator('.status', { hasText: 'Downloading' }).waitFor();
+    assert.equal(await page.isDisabled('#btn-stop'), false);
+    assert.match(await tipFor('#btn-stop'), /Stop: ends the download/);
+    await page.click('#btn-stop');
+    await row.locator('.status', { hasText: 'Stopped' }).waitFor();
+    assert.ok(await page.evaluate(() => window.__ldmCalls.some((c) => c.cmd === 'stop')));
+    assert.equal(await page.isDisabled('#btn-stop'), true, 'already stopped');
+    assert.equal(await page.isDisabled('#btn-resume'), false, 'Continue starts it again');
+    // Still in the list, under "Not finished".
+    await page.click('.nav-item[data-filter="stopped"]');
+    await row.waitFor();
+    await page.click('.nav-item[data-filter="all"]');
+    // The right-click menu has Stop too.
+    await row.click();
+    await page.click('#btn-resume');
+    await row.locator('.status', { hasText: 'Downloading' }).waitFor();
+    await row.click({ button: 'right' });
+    await page.locator('.menu [role="menuitem"]', { hasText: 'Stop' }).click();
+    await row.locator('.status', { hasText: 'Stopped' }).waitFor();
+    await page.click('#btn-resume');
+    await row.locator('.status', { hasText: 'Downloading' }).waitFor();
+  }
+  console.log('ok - Stop ends a download (it stays in the list as Stopped), from the toolbar or the right-click menu; Continue starts it again');
+
   // The folder field: automatic by default, Choose… picks a folder, × goes back.
   await page.click('#btn-add');
   await page.locator('#dlg-add[open]').waitFor();

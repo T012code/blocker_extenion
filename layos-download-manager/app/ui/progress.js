@@ -3,7 +3,7 @@
 // carries on). Its label is "dl-<id>".
 
 import { invoke, isMock, listen, pick, windowLabel } from './backend.js';
-import { STATUS_TEXT, action, bytes, eta, percent, speed } from './format.js';
+import { STATUS_TEXT, action, bytes, canStop, eta, percent, speed } from './format.js';
 import { hydrateIcons, icon } from './icons.js';
 import { renderMap } from './sectionmap.js';
 import { initTooltips } from './tooltip.js';
@@ -44,6 +44,7 @@ function progress() {
 /** What each stopped state means for you, in one line. */
 const HINT = {
   paused: 'Paused. Continue whenever you like.',
+  stopped: 'Stopped. It keeps what it has; Continue starts it again.',
   queued: 'Waiting to start.',
   connecting: 'Connecting to the server…',
   needsRefresh: 'The link expired. Refresh it to carry on from here.',
@@ -127,6 +128,7 @@ function render() {
   renderMap($('map'), d, p);
   // Pause or Continue, as the download allows.
   const act = action(d.status);
+  $('stop').hidden = !canStop(d.status);
   const b = $('pause');
   b.disabled = !act;
   const refresh = d.status === 'needsRefresh' && (d.kind?.type ?? 'http') === 'http';
@@ -253,6 +255,9 @@ $('dup-again').addEventListener('click', () => resolveDuplicate('again'));
 $('dup-dismiss').addEventListener('click', () => resolveDuplicate('dismiss'));
 $('hide').addEventListener('click', () => invoke('window_close'));
 $('close').addEventListener('click', () => invoke('window_close'));
+$('stop').addEventListener('click', () => {
+  if (d) run(invoke('stop', { ids: [d.id] }), 'Couldn\'t stop');
+});
 $('pause').addEventListener('click', () => {
   if (!d) return;
   if ($('pause').dataset.act === 'refresh') run(invoke('request_refresh', { id: d.id }), 'Couldn\'t open the app');

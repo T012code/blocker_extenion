@@ -138,6 +138,22 @@ jobs:
           Copy-Item extension/dist/*.zip release/
           Get-ChildItem release | Format-Table Name, Length
 
+      # Building the same version again (fixes before it's announced) replaces it:
+      # the old release and its tag go, so the tag moves to this commit.
+      - name: Replace an earlier build of this version
+        if: (startsWith(github.ref, 'refs/tags/ldm-v') || inputs.release) && !startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "ldm-v${env:VERSION}"
+          gh release view $tag --repo "${{ github.repository }}" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release delete $tag --repo "${{ github.repository }}" --cleanup-tag --yes
+            "replaced the earlier $tag"
+          }
+          $global:LASTEXITCODE = 0
+
       - name: Publish the release
         if: startsWith(github.ref, 'refs/tags/ldm-v') || inputs.release
         uses: softprops/action-gh-release@v2

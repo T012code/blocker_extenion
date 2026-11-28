@@ -158,6 +158,15 @@ pub async fn pause(state: S<'_>, ids: Vec<i64>) -> R<()> {
     Ok(())
 }
 
+/// Stops downloads for good (unlike pause, nothing restarts them by itself).
+#[tauri::command]
+pub async fn stop(state: S<'_>, ids: Vec<i64>) -> R<()> {
+    for id in ids {
+        state.engine.stop(id).await.map_err(err)?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn resume(state: S, ids: Vec<i64>) -> R<()> {
     for id in ids {

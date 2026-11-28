@@ -422,6 +422,29 @@ impl Engine {
         Ok(())
     }
 
+    /// Stops a download for good: unlike pausing, nothing starts it again by itself.
+    /// It keeps what it has, and Continue can still start it again. A torrent that is
+    /// sharing stops sharing and counts as finished.
+    pub async fn stop(&self, id: DownloadId) -> Result<()> {
+        let before = self.get(id)?.status;
+        if before == DownloadStatus::Completed {
+            return Ok(());
+        }
+        self.pause(id).await?;
+        self.inner.update(id, true, |d| {
+            if d.status == DownloadStatus::Completed {
+                return;
+            }
+            if before == DownloadStatus::Seeding {
+                d.status = DownloadStatus::Completed;
+            } else {
+                d.status = DownloadStatus::Stopped;
+                d.error = None;
+            }
+        });
+        Ok(())
+    }
+
     pub async fn pause_all(&self) {
         let ids: Vec<_> = self.inner.running.lock().unwrap().keys().copied().collect();
         for id in ids {

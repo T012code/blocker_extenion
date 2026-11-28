@@ -54,6 +54,10 @@ pub enum DownloadStatus {
     Seeding,
     /// Held back by privacy protection: waiting for the VPN or proxy (kill switch).
     Blocked,
+    /// Stopped by the user: it stays in the list with what it has, and nothing starts
+    /// it again by itself (not a queue, the network coming back, or a restart). Only
+    /// Continue does.
+    Stopped,
 }
 
 impl DownloadStatus {

@@ -178,6 +178,10 @@ export async function invoke(cmd, args) {
     case 'pause':
       for (const id of args.ids) { const d = downloads.get(id); if (d) update(d, { status: 'paused' }); }
       return null;
+    case 'stop':
+      window.__ldmCalls.push({ cmd, args: structuredClone(args) });
+      for (const id of args.ids) { const d = downloads.get(id); if (d && d.status !== 'completed') update(d, d.status === 'seeding' ? { status: 'completed' } : { status: 'stopped', error: null }); }
+      return null;
     case 'resume':
       for (const id of args.ids) { const d = downloads.get(id); if (d) update(d, { status: 'downloading', error: null }); }
       return null;
