@@ -17,9 +17,26 @@ A cross-device clipboard for **Windows only**, developed by Layó. It works the 
 - Folder: `clippy/` at the repository root, next to `adblocker/` and `layos-download-manager/` (that layout is on branch `claude/dazzling-bohr-1mx1tk`).
 - CI: a Windows workflow like `.github/workflows/download-manager-windows.yml`.
 
+## Decided
+- **Sync server: Supabase.** Build and test on the Free plan. Move to Pro ($25/month) before launch, because free projects pause after a week of inactivity.
+- **Text clips** are kept for **7 days**, then deleted.
+- **Image clips** are kept for **24 hours**, then deleted.
+
+## Database and sync plan
+- One `clips` table: id, user_id, device_id, kind (text or image), encrypted payload, content hash, created_at, expires_at. Indexes on `(user_id, created_at desc)` and `expires_at`. Row-level security so each account sees only its own rows.
+- Images go to Supabase Storage, not into the table. The table row only points to the file.
+- An hourly scheduled job (pg_cron) deletes expired rows. Image files are deleted through the Storage API (an Edge Function on the same schedule), because deleting their database rows directly leaves the files behind.
+- New clips reach other devices over a private Realtime **Broadcast** channel for each account, not Postgres Changes, which is slower and heavier.
+- On reconnect, a device fetches only the clips newer than the last one it has, never the whole history.
+
+## Optimisations to confirm
+- Skip clips that password managers mark as private (Windows' clipboard "don't keep in history" flags).
+- Don't upload the same clip twice (compare content hashes), and send only the last of several quick copies.
+- Size caps: text up to 100 KB. Images resized to at most 1920 px, saved as WebP, up to 2 MB. Thumbnails are made on the PC, not by Supabase's paid image service.
+- Cap each account at about 200 clips, as well as the 7-day and 24-hour limits.
+- Disconnect from Realtime while the PC is locked or asleep (saves battery and connections), and catch up on unlock.
+
 ## Open questions (ask before building)
-1. Sync server: Supabase (suggested: free tier, email sign-in, instant push), a small self-hosted Rust relay, or Firebase?
-2. Sign-in: email + password (the password also unlocks end-to-end encryption, suggested because people copy passwords) or email + 6-digit code like Blip?
-3. Clip types: text only, text + images (suggested), or text + images + small files?
-4. Floating icon: in any text box in any app (suggested, plus a Ctrl+Shift+V hotkey), or the hotkey only?
-5. The name: "Clippy" is also Microsoft's old Office assistant, so check the name is safe to use before publishing.
+1. Sign-in: email + password (the password also unlocks end-to-end encryption, suggested because people copy passwords) or email + 6-digit code like Blip?
+2. Floating icon: in any text box in any app (suggested, plus a Ctrl+Shift+V hotkey), or the hotkey only?
+3. The name: "Clippy" is also Microsoft's old Office assistant, so check the name is safe to use before publishing.
