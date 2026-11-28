@@ -7,6 +7,7 @@ It includes the following, each under its own licence:
 | --- | --- | --- | --- |
 | yt-dlp | Lists and downloads video formats | The Unlicense (public domain) | https://github.com/yt-dlp/yt-dlp |
 | FFmpeg | Joins video and audio tracks | GNU GPL v3 (this build) | https://ffmpeg.org, build from https://github.com/BtbN/FFmpeg-Builds |
+| Deno | Runs the small scripts yt-dlp needs to read YouTube's formats | MIT License | https://github.com/denoland/deno |
 | librqbit | BitTorrent engine | Apache License 2.0 | https://github.com/ikatson/rqbit |
 | Tauri | App framework | MIT or Apache License 2.0 | https://github.com/tauri-apps/tauri |
 | Archivo | Typeface | SIL Open Font License 1.1 | https://github.com/Omnibus-Type/Archivo |

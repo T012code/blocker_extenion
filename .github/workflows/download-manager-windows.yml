@@ -58,7 +58,7 @@ jobs:
       - name: Build the browser bridge
         run: cargo build --release -p ldm-native-host
 
-      - name: Put the bridge, yt-dlp and ffmpeg where the installer expects them
+      - name: Put the bridge, yt-dlp, ffmpeg and Deno where the installer expects them
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -70,6 +70,11 @@ jobs:
           Invoke-WebRequest https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip -OutFile ffmpeg.zip
           Expand-Archive ffmpeg.zip -DestinationPath ffmpeg
           Copy-Item (Get-ChildItem ffmpeg -Recurse -Filter ffmpeg.exe | Select-Object -First 1).FullName "$app/tools/ffmpeg.exe"
+          # yt-dlp needs a JavaScript runtime for YouTube (without one, most or all formats are missing).
+          Invoke-WebRequest https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip -OutFile deno.zip
+          Expand-Archive deno.zip -DestinationPath deno
+          Copy-Item deno/deno.exe "$app/tools/deno.exe"
+          & "$app/tools/deno.exe" --version | Select-Object -First 1
           & "$app/tools/yt-dlp.exe" --version
           & "$app/tools/ffmpeg.exe" -hide_banner -version | Select-Object -First 1
 
@@ -90,7 +95,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $setup = Get-ChildItem target/release/bundle/nsis/*_x64-setup.exe | Select-Object -First 1
           & 7z x -y -oinstaller-check $setup.FullName | Out-Null
-          foreach ($f in 'extensions/chromium/manifest.json', 'extensions/chromium/background/main.js', 'extensions/firefox/layos-download-manager.xpi') {
+          foreach ($f in 'extensions/chromium/manifest.json', 'extensions/chromium/background/main.js', 'extensions/firefox/layos-download-manager.xpi', 'tools/deno.exe', 'tools/yt-dlp.exe') {
             $hit = Get-ChildItem installer-check -Recurse -File | Where-Object { $_.FullName.Replace('\', '/').EndsWith($f) }
             if (-not $hit) { throw "The installer is missing $f" }
             "found $f ($($hit[0].Length) bytes)"

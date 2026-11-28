@@ -1,14 +1,17 @@
-//! Finding and running yt-dlp and ffmpeg.
+//! Finding and running yt-dlp, ffmpeg and Deno.
 
 use std::path::{Path, PathBuf};
 
 use ldm_engine::{Error, RequestInfo, Result};
 
-/// Where yt-dlp and ffmpeg are.
+/// Where yt-dlp, ffmpeg and Deno are.
 #[derive(Debug, Clone, Default)]
 pub struct Tools {
     pub ytdlp: Option<PathBuf>,
     pub ffmpeg: Option<PathBuf>,
+    /// A JavaScript runtime. yt-dlp needs one for YouTube: without it most formats
+    /// (often all of them) are missing.
+    pub deno: Option<PathBuf>,
 }
 
 fn exe(name: &str) -> String {
@@ -27,7 +30,7 @@ fn on_path(name: &str) -> Option<PathBuf> {
 }
 
 impl Tools {
-    /// Looks in this order: `LDM_YTDLP` / `LDM_FFMPEG`, the `tools` folder next to the
+    /// Looks in this order: `LDM_YTDLP` / `LDM_FFMPEG` / `LDM_DENO`, the `tools` folder next to the
     /// app (where the installer puts them), then the PATH.
     pub fn find(app_dir: Option<&Path>) -> Self {
         let pick = |env: &str, name: &str| {
@@ -44,6 +47,7 @@ impl Tools {
         Self {
             ytdlp: pick("LDM_YTDLP", "yt-dlp"),
             ffmpeg: pick("LDM_FFMPEG", "ffmpeg"),
+            deno: pick("LDM_DENO", "deno"),
         }
     }
 
@@ -52,6 +56,17 @@ impl Tools {
             Error::Other("yt-dlp is missing. Reinstall Layó's Download Manager to restore the video downloader.".into())
         })
     }
+}
+
+/// A yt-dlp command, with the JavaScript runtime it needs for YouTube.
+pub(crate) fn ytdlp_command(tools: &Tools) -> Result<tokio::process::Command> {
+    let mut cmd = command(tools.ytdlp()?);
+    if let Some(deno) = &tools.deno {
+        let mut arg = std::ffi::OsString::from("deno:");
+        arg.push(deno.as_os_str());
+        cmd.arg("--js-runtimes").arg(arg);
+    }
+    Ok(cmd)
 }
 
 pub(crate) fn command(program: &Path) -> tokio::process::Command {
@@ -120,7 +135,30 @@ impl Drop for CookieFile {
     }
 }
 
-/// Passes on the browser's referrer, user agent and cookies.
+/// Sites where yt-dlp speaks as one of the site's own apps: a browser's user agent
+/// would contradict that and makes the site refuse the formats.
+fn has_own_clients(url: &str) -> bool {
+    let host = url
+        .split("://")
+        .nth(1)
+        .and_then(|r| r.split(['/', '?', '#', ':']).next())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    ["youtube.com", "youtu.be", "youtube-nocookie.com"]
+        .iter()
+        .any(|d| host == *d || host.ends_with(&format!(".{d}")))
+}
+
+/// Whether the browser's details (cookies, user agent, referrer, headers) are sent.
+pub(crate) fn sends_browser_details(req: &RequestInfo) -> bool {
+    req.cookies.as_deref().is_some_and(|c| !c.trim().is_empty())
+        || req.user_agent.as_deref().is_some_and(|u| !u.is_empty())
+        || req.referer.as_deref().is_some_and(|r| !r.is_empty())
+        || !req.headers.is_empty()
+}
+
+/// Passes on the browser's referrer, user agent and cookies (not the user agent where
+/// yt-dlp uses the site's own apps).
 pub(crate) fn add_request_args(
     cmd: &mut tokio::process::Command,
     req: &RequestInfo,
@@ -129,7 +167,9 @@ pub(crate) fn add_request_args(
     if let Some(r) = req.referer.as_deref().filter(|r| !r.is_empty()) {
         cmd.arg("--referer").arg(r);
     }
-    if let Some(ua) = req.user_agent.as_deref().filter(|u| !u.is_empty()) {
+    if let Some(ua) = req.user_agent.as_deref().filter(|u| !u.is_empty())
+        && !has_own_clients(&req.url)
+    {
         cmd.arg("--user-agent").arg(ua);
     }
     if let Some(c) = cookies {
@@ -138,6 +178,15 @@ pub(crate) fn add_request_args(
     for (k, v) in &req.headers {
         cmd.arg("--add-header").arg(format!("{k}:{v}"));
     }
+}
+
+/// yt-dlp found no format it could use. Often caused by the browser's cookies or user
+/// agent (they make the site answer differently), so it's worth one more try without.
+pub(crate) fn is_format_error(msg: &str) -> bool {
+    let m = msg.to_ascii_lowercase();
+    m.contains("requested format is not available")
+        || m.contains("no video formats found")
+        || m.contains("only images are available")
 }
 
 /// The most useful line of yt-dlp's error output.
@@ -153,6 +202,8 @@ pub(crate) fn last_error(stderr: &str) -> String {
         "No downloadable video was found at this address.".to_string()
     } else if msg.to_lowercase().contains("drm") {
         "This video is protected (DRM) and can't be downloaded.".to_string()
+    } else if is_format_error(msg) {
+        "The site offered no format that can be downloaded. Try again in a moment; if it keeps happening, the video downloader may need an update.".to_string()
     } else {
         msg.to_string()
     }
@@ -186,5 +237,28 @@ mod tests {
             "No downloadable video was found at this address."
         );
         assert!(last_error("ERROR: [x] This video is DRM protected").contains("protected"));
+    }
+}
+
+#[cfg(test)]
+mod request_tests {
+    use super::*;
+
+    #[test]
+    fn youtube_keeps_its_own_user_agent() {
+        assert!(has_own_clients("https://www.youtube.com/watch?v=x"));
+        assert!(has_own_clients("https://youtu.be/x"));
+        assert!(has_own_clients("https://m.youtube.com/watch?v=x"));
+        assert!(!has_own_clients("https://notyoutube.com/x"));
+        assert!(!has_own_clients("https://vimeo.com/1"));
+    }
+
+    #[test]
+    fn spots_format_errors() {
+        assert!(is_format_error(
+            "[youtube] x35MG2bbKqo: Requested format is not available. Use --list-formats for a list of available formats"
+        ));
+        assert!(is_format_error("No video formats found!"));
+        assert!(!is_format_error("HTTP Error 404: Not Found"));
     }
 }

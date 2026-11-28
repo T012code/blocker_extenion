@@ -180,7 +180,9 @@ It works the same on social sites and feeds (Facebook, X, Instagram, TikTok, Red
 
 Pick one and it downloads in the app, named after the page's title. Streams are fetched several pieces at a time, and separate picture and sound tracks are joined with ffmpeg. Video downloads pause and continue like any other. Protected (DRM) videos, such as on paid streaming services, show a message instead: they can't be downloaded.
 
-yt-dlp and ffmpeg ship with the Windows installer. For development, put them on your PATH, or set `LDM_YTDLP` and `LDM_FFMPEG`.
+**YouTube** needs a JavaScript runtime for yt-dlp to read its formats; the installer includes [Deno](https://deno.com) for that. yt-dlp keeps YouTube's own user agent (the browser's would make YouTube refuse the formats), and if a site offers nothing usable with your browser's cookies, the lookup and the download try once more without them. Each quality also falls back to the same height (then the best there is), so it doesn't fail when a site hands out a different set of formats at download time.
+
+yt-dlp, ffmpeg and Deno ship with the Windows installer. For development, put them on your PATH, or set `LDM_YTDLP`, `LDM_FFMPEG` and `LDM_DENO`.
 
 ## Torrents
 

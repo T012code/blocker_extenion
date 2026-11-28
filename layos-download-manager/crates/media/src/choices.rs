@@ -197,12 +197,16 @@ fn build_choices_from(formats: &[Format]) -> Vec<MediaChoice> {
                     "mkv"
                 };
                 (
-                    format!("{}+{}", v.id, a.id),
+                    format!("{}+{}/{}", v.id, a.id, same_height(h)),
                     v.size.zip(a.size).map(|(x, y)| x + y),
                     ext.to_string(),
                 )
             }
-            _ => (v.id.clone(), v.size, v.ext.clone()),
+            _ => (
+                format!("{}/{}", v.id, same_height(h)),
+                v.size,
+                v.ext.clone(),
+            ),
         };
         out.push(MediaChoice {
             format,
@@ -221,7 +225,7 @@ fn build_choices_from(formats: &[Format]) -> Vec<MediaChoice> {
             .max_by(|a, b| a.tbr.total_cmp(&b.tbr))
     {
         out.push(MediaChoice {
-            format: v.id.clone(),
+            format: format!("{}/bv*+ba/b", v.id),
             label: format!("Video {}", v.ext.to_uppercase()),
             kind: "video".into(),
             ext: v.ext.clone(),
@@ -231,7 +235,7 @@ fn build_choices_from(formats: &[Format]) -> Vec<MediaChoice> {
     }
     if let Some(a) = best_audio {
         out.push(MediaChoice {
-            format: a.id.clone(),
+            format: format!("{}/ba/b", a.id),
             label: format!("Audio only {}", a.ext.to_uppercase()),
             kind: "audio".into(),
             ext: a.ext.clone(),
@@ -240,6 +244,13 @@ fn build_choices_from(formats: &[Format]) -> Vec<MediaChoice> {
         });
     }
     out
+}
+
+/// After the exact format, what to fall back to: the same height, then the best there
+/// is. Format ids can differ between the listing and the download (sites hand out
+/// different sets), and a missing one must not fail the download.
+fn same_height(h: u32) -> String {
+    format!("bv*[height<={h}]+ba/b[height<={h}]/bv*+ba/b")
 }
 
 #[cfg(test)]
@@ -265,11 +276,14 @@ mod tests {
         assert_eq!(info.extractor.as_deref(), Some("youtube"));
         let c = info.choices;
         assert_eq!(c[0].label, "1080p60 MP4");
-        assert_eq!(c[0].format, "299+140");
+        assert_eq!(
+            c[0].format,
+            "299+140/bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b"
+        );
         assert_eq!(c[0].size, Some(81000));
         assert_eq!(c[1].label, "360p MP4");
         assert_eq!(
-            c[1].format, "18",
+            c[1].format, "18/bv*[height<=360]+ba/b[height<=360]/bv*+ba/b",
             "a file with sound already needs no merging"
         );
         assert_eq!(c[2].label, "Audio only M4A");
@@ -288,7 +302,7 @@ mod tests {
             c.iter().map(|c| c.label.as_str()).collect::<Vec<_>>(),
             ["720p MP4", "360p MP4"]
         );
-        assert_eq!(c[0].format, "hls-2400");
+        assert!(c[0].format.starts_with("hls-2400/"));
     }
 
     #[test]

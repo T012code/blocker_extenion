@@ -39,19 +39,42 @@ impl MediaRunner {
     }
 
     async fn run_job(self: Arc<Self>, job: Job) -> Result<()> {
+        // With the browser's cookies and details first; if the site then offers no
+        // usable format, once more without them (as when listing the formats).
+        match self.attempt(&job, false).await {
+            Err(Error::Other(raw))
+                if tools::is_format_error(&raw)
+                    && tools::sends_browser_details(&job.download.request) =>
+            {
+                tracing::info!("no formats with the browser's details; trying without: {raw}");
+                self.attempt(&job, true).await
+            }
+            r => r,
+        }
+        .map_err(|e| match e {
+            Error::Other(raw) => Error::Other(tools::last_error(&raw)),
+            e => e,
+        })
+    }
+
+    /// One try. Errors carry yt-dlp's raw error output.
+    async fn attempt(&self, job: &Job, plain: bool) -> Result<()> {
         let d = job.download.clone();
         let DownloadKind::Media(spec) = &d.kind else {
             return Err(Error::Other("not a media download".into()));
         };
-        let ytdlp = self.tools.ytdlp()?.to_path_buf();
         let work = self.work_folder(d.id);
         std::fs::create_dir_all(&work)?;
         std::fs::create_dir_all(&d.save_dir)?;
 
         let mut req = d.request.clone();
         req.url = spec.page_url.clone();
-        let cookies = CookieFile::write(&req)?;
-        let mut cmd = tools::command(&ytdlp);
+        let cookies = if plain {
+            None
+        } else {
+            CookieFile::write(&req)?
+        };
+        let mut cmd = tools::ytdlp_command(&self.tools)?;
         cmd.args(["--newline", "--no-playlist", "--no-warnings", "--no-colors", "--continue", "--no-mtime"])
             .args(["--windows-filenames", "--no-simulate", "--progress"])
             .arg("-f")
@@ -78,7 +101,9 @@ impl MediaRunner {
         if d.speed_limit > 0 {
             cmd.arg("-r").arg(d.speed_limit.to_string());
         }
-        tools::add_request_args(&mut cmd, &req, cookies.as_ref());
+        if !plain {
+            tools::add_request_args(&mut cmd, &req, cookies.as_ref());
+        }
         cmd.arg("--").arg(&spec.page_url);
         cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
@@ -128,7 +153,7 @@ impl MediaRunner {
         let status = child.wait().await?;
         let stderr = errors.await.unwrap_or_default();
         if !status.success() {
-            return Err(Error::Other(tools::last_error(&stderr)));
+            return Err(Error::Other(stderr));
         }
         let path = final_path
             .ok_or_else(|| Error::Other("yt-dlp finished without saving a file".into()))?;
