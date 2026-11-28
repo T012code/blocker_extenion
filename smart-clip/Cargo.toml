@@ -1,0 +1,17 @@
+[workspace]
+resolver = "3"
+members = ["crates/core", "app/src-tauri"]
+
+[workspace.package]
+version = "1.0.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+authors = ["Layo"]
+repository = "https://github.com/t012code/blocker_extenion"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+opt-level = "s"
+panic = "abort"
