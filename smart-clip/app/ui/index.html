@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Smart Clip</title>
+  <script src="theme.js"></script>
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="top">
+      <button id="btn-back" class="btn ghost icon" type="button" aria-label="Back to clips" title="Back" hidden></button>
+      <img src="brand/app-icon.png" width="24" height="24" alt="">
+      <span class="name" id="title">Smart Clip</span>
+      <span id="status" class="tag" hidden></span>
+      <span class="spacer"></span>
+      <button id="btn-settings" class="btn ghost icon" type="button" aria-label="Settings" title="Settings" hidden></button>
+    </header>
+
+    <main class="view" id="main">
+      <!-- The app was built without a server -->
+      <section id="view-setup" class="signin" hidden>
+        <div class="hero">
+          <img src="brand/app-icon.png" width="56" height="56" alt="">
+          <h1>Almost ready</h1>
+          <p>This copy of Smart Clip isn't connected to its server yet. The server's address goes in <strong>config/supabase.json</strong> before building.</p>
+        </div>
+      </section>
+
+      <!-- Sign in: email, then the emailed code -->
+      <section id="view-signin" class="signin" hidden>
+        <div class="hero">
+          <img src="brand/app-icon.png" width="56" height="56" alt="">
+          <h1>Your clipboard,<br>on all your PCs</h1>
+          <p>Sign in with the same email on each PC. Copy on one, paste on another.</p>
+        </div>
+        <form id="form-email" class="form" novalidate>
+          <label class="field">
+            <span>Email</span>
+            <input id="email" class="input" type="email" autocomplete="email" placeholder="you@example.com" required>
+          </label>
+          <p class="error" id="email-error" role="alert"></p>
+          <button class="btn primary wide" type="submit" id="btn-send">Email me a sign-in code</button>
+          <p class="note">New here? The code creates your account. No password needed.</p>
+        </form>
+        <form id="form-code" class="form" novalidate hidden>
+          <p class="sent">We sent a code to <strong id="sent-to"></strong>. Type it here to sign in.</p>
+          <label class="field">
+            <span>Code</span>
+            <input id="code" class="input code" inputmode="numeric" autocomplete="one-time-code" maxlength="12" placeholder="••••••" required>
+          </label>
+          <p class="error" id="code-error" role="alert"></p>
+          <button class="btn primary wide" type="submit" id="btn-verify">Sign in</button>
+          <div class="row">
+            <button class="link" type="button" id="btn-resend">Send a new code</button>
+            <button class="link" type="button" id="btn-other">Use another email</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- Clips from every PC -->
+      <section id="view-clips" hidden>
+        <div class="toolbar">
+          <label class="search">
+            <span id="search-icon"></span>
+            <input id="search" class="input" type="search" placeholder="Search clips" aria-label="Search clips">
+          </label>
+          <div class="seg" role="group" aria-label="Show">
+            <button type="button" data-filter="all" aria-pressed="true">All</button>
+            <button type="button" data-filter="text" aria-pressed="false">Text</button>
+            <button type="button" data-filter="image" aria-pressed="false">Images</button>
+          </div>
+        </div>
+        <div id="banner" class="banner" hidden></div>
+        <ul id="clips" class="clips" aria-label="Clips"></ul>
+        <div id="empty" class="empty" hidden></div>
+      </section>
+
+      <!-- Settings -->
+      <section id="view-settings" class="settings" hidden>
+        <div class="group">
+          <h2>Account</h2>
+          <div class="card">
+            <div class="setting">
+              <div class="text"><strong>Signed in as</strong><span class="email" id="set-email"></span></div>
+              <button class="btn" type="button" id="btn-signout">Sign out</button>
+            </div>
+            <div class="setting">
+              <div class="text"><strong>This PC's name</strong><span>Shown on clips copied here</span></div>
+              <input id="set-device" class="input" type="text" maxlength="64" aria-label="This PC's name">
+            </div>
+          </div>
+        </div>
+
+        <div class="group">
+          <h2>Pasting</h2>
+          <div class="card">
+            <div class="setting">
+              <div class="text"><strong>Floating icon in text boxes</strong><span>Click it to paste a recent clip</span></div>
+              <label class="switch"><input type="checkbox" id="set-float" aria-label="Floating icon in text boxes"><span></span></label>
+            </div>
+            <div class="chips" id="hidden-apps" aria-label="Apps where the icon is hidden"></div>
+            <div class="setting">
+              <div class="text"><strong>Shortcut</strong><span>Opens your clips wherever you're typing</span></div>
+              <select id="set-hotkey" class="input" aria-label="Shortcut"></select>
+            </div>
+          </div>
+        </div>
+
+        <div class="group">
+          <h2>Syncing</h2>
+          <div class="card">
+            <div class="setting">
+              <div class="text"><strong>Pause syncing</strong><span>Copies stay on this PC while paused</span></div>
+              <label class="switch"><input type="checkbox" id="set-paused" aria-label="Pause syncing"><span></span></label>
+            </div>
+            <div class="setting">
+              <div class="text"><strong>Sync images</strong><span>Pictures and screenshots, kept for 24 hours</span></div>
+              <label class="switch"><input type="checkbox" id="set-images" aria-label="Sync images"><span></span></label>
+            </div>
+          </div>
+          <p class="note">Text clips are kept for 7 days and images for 24 hours, then deleted everywhere. Passwords copied from password managers are never synced.</p>
+        </div>
+
+        <div class="group">
+          <h2>App</h2>
+          <div class="card">
+            <div class="setting">
+              <div class="text"><strong>Appearance</strong></div>
+              <div class="seg" role="group" aria-label="Appearance" id="set-theme">
+                <button type="button" data-theme="system" aria-pressed="false">System</button>
+                <button type="button" data-theme="light" aria-pressed="false">Light</button>
+                <button type="button" data-theme="dark" aria-pressed="false">Dark</button>
+              </div>
+            </div>
+            <div class="setting">
+              <div class="text"><strong>Start with Windows</strong><span>Runs quietly in the tray</span></div>
+              <label class="switch"><input type="checkbox" id="set-autostart" aria-label="Start with Windows"><span></span></label>
+            </div>
+            <div class="setting">
+              <div class="text"><strong>Delete all clips</strong><span>From every PC signed in to this account</span></div>
+              <div class="confirm" id="clear-box">
+                <button class="btn danger" type="button" id="btn-clear">Delete all</button>
+              </div>
+            </div>
+          </div>
+          <p class="note">Closing the window keeps Smart Clip running in the tray. <span id="version"></span></p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <button class="credit" type="button" id="credit" title="layothedeveloper.com">
+        <img class="mark-light" src="brand/layo-mark-light.svg" alt="">
+        <img class="mark-dark" src="brand/layo-mark-dark.svg" alt="">
+        <span>Developed by <strong>Layó</strong></span>
+      </button>
+    </footer>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

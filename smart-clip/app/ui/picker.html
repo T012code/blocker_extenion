@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Smart Clip</title>
+  <script src="theme.js"></script>
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="picker.js"></script>
+</head>
+<body class="picker">
+  <div class="pk">
+    <div class="pk-top">
+      <label class="search">
+        <span id="search-icon"></span>
+        <input id="q" class="input" type="search" placeholder="Search your clips" aria-label="Search your clips" aria-controls="list" autocomplete="off">
+      </label>
+      <button id="btn-open" class="btn ghost icon" type="button" title="Open Smart Clip" aria-label="Open Smart Clip"></button>
+    </div>
+    <ul id="list" class="pk-list" role="listbox" aria-label="Clips"></ul>
+    <div id="empty" class="pk-empty" hidden></div>
+    <div class="pk-foot" id="foot">
+      <span><kbd>↑</kbd> <kbd>↓</kbd> choose</span>
+      <span><kbd>Enter</kbd> paste</span>
+      <span><kbd>Esc</kbd> close</span>
+    </div>
+  </div>
+</body>
+</html>
