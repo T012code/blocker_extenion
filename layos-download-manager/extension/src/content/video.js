@@ -311,7 +311,10 @@
     menu.append(localGroup, siteGroup, el('div', 'foot', 'Layó\'s Download Manager'));
     const pageUrl = postUrlFor(video);
     host.dataset.pageUrl = pageUrl; // which post the menu is for (also read by tests)
-    const info = { src: video.currentSrc || video.src, duration: video.duration, pageUrl, title };
+    // The playlist the page is playing (YouTube's "list="), so it can be downloaded whole.
+    const list = /(^|\.)youtube\.com$/.test(location.hostname) ? new URLSearchParams(location.search).get('list') : null;
+    const playlistUrl = list ? `https://www.youtube.com/playlist?list=${encodeURIComponent(list)}` : null;
+    const info = { src: video.currentSrc || video.src, duration: video.duration, pageUrl, title, playlistUrl };
 
     // What the page itself played: instant.
     api.runtime.sendMessage({ type: 'videoChoices', ...info }).then((r) => {
@@ -330,7 +333,12 @@
       if (r?.choices?.length) {
         siteGroup.append(el('div', 'group', r.live ? 'From the site (live)' : 'From the site'));
         for (const c of r.choices) siteGroup.append(itemFor(c, r.title || title));
-      } else if (!localGroup.childElementCount) {
+      }
+      if (r?.playlist?.choices?.length) {
+        siteGroup.append(el('div', 'group', `Whole playlist · ${r.playlist.count} videos`));
+        for (const c of r.playlist.choices) siteGroup.append(itemFor(c, r.playlist.title));
+      }
+      if (!r?.choices?.length && !r?.playlist?.choices?.length && !localGroup.childElementCount) {
         siteGroup.append(el('div', 'note', r?.error || 'No downloadable formats found for this video.'));
       }
     } catch (e) {

@@ -15,7 +15,10 @@ use ldm_engine::{
     Download, DownloadKind, DownloadStatus, Engine, Event, MediaSpec, NewDownload, RequestInfo,
     TorrentSpec,
 };
-use ldm_ipc::{BrowserDownload, DownloadSummary, MediaFormatChoice, Request, Response, Source};
+use ldm_ipc::{
+    BrowserDownload, DownloadSummary, MediaFormatChoice, MediaPick, PlaylistSummary, Request,
+    Response, Source,
+};
 use ldm_media::Tools;
 
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -72,6 +75,8 @@ pub struct Service {
     media_tools: Tools,
     /// Expired downloads waiting for a fresh link from the browser, until when.
     waiting: Arc<Mutex<HashMap<i64, Instant>>>,
+    /// The app's queues: a whole playlist gets one.
+    queues: Option<Arc<queues::Queues>>,
 }
 
 impl Service {
@@ -111,12 +116,19 @@ impl Service {
             live,
             media_tools: Tools::default(),
             waiting: Arc::default(),
+            queues: None,
         }
     }
 
     /// Where to find yt-dlp and ffmpeg for listing video formats.
     pub fn with_media_tools(mut self, tools: Tools) -> Self {
         self.media_tools = tools;
+        self
+    }
+
+    /// The app's queues, for whole playlists (each gets a queue of its own).
+    pub fn with_queues(mut self, queues: Arc<queues::Queues>) -> Self {
+        self.queues = Some(queues);
         self
     }
 
@@ -165,7 +177,9 @@ impl Service {
                 Ok(()) => Response::Ok,
                 Err(e) => Response::error(e.to_string()),
             },
-            Request::MediaFormats { item } => self.media_formats(*item).await,
+            Request::MediaFormats { item, playlist_url } => {
+                self.media_formats(*item, playlist_url).await
+            }
             Request::RefreshLink { id } => match self.refresh_link(id).await {
                 Ok(Refresh::Resumed) => Response::Refresh {
                     resumed: true,
@@ -286,12 +300,48 @@ impl Service {
         Some(found.id)
     }
 
-    async fn media_formats(&self, item: BrowserDownload) -> Response {
+    async fn media_formats(&self, item: BrowserDownload, playlist_url: Option<String>) -> Response {
         if !is_web_url(&item.url) {
             return Response::error("not a web address");
         }
         let req = to_new_download(item, false).request;
-        match ldm_media::formats(&self.media_tools, &req, Duration::from_secs(90)).await {
+        // The page's playlist (if it plays one) is listed alongside: both take a moment.
+        let list_req = playlist_url
+            .as_deref()
+            .and_then(ldm_media::playlist_url)
+            .map(|url| RequestInfo { url, ..req.clone() });
+        let (formats, playlist) = tokio::join!(
+            ldm_media::formats(&self.media_tools, &req, Duration::from_secs(90)),
+            async {
+                match &list_req {
+                    Some(r) => ldm_media::playlist(&self.media_tools, r, Duration::from_secs(60))
+                        .await
+                        .ok(),
+                    None => None,
+                }
+            }
+        );
+        let playlist = playlist
+            .zip(list_req)
+            .filter(|(p, _)| p.entries.len() > 1)
+            .map(|(p, r)| PlaylistSummary {
+                url: r.url,
+                title: p.title,
+                count: p.entries.len(),
+                choices: ldm_media::PLAYLIST_QUALITIES
+                    .iter()
+                    .map(|(label, format, audio)| MediaFormatChoice {
+                        format: format.to_string(),
+                        label: label.to_string(),
+                        kind: if *audio { "audio" } else { "video" }.to_string(),
+                        ext: if *audio { "m4a" } else { "mp4" }.to_string(),
+                        height: None,
+                        size: None,
+                        item: None,
+                    })
+                    .collect(),
+            });
+        match formats {
             Ok(info) => Response::MediaFormats {
                 title: info.title,
                 duration: info.duration,
@@ -310,9 +360,63 @@ impl Service {
                         item: c.item,
                     })
                     .collect(),
+                playlist,
+            },
+            // The video itself failed, but its playlist can still be downloaded.
+            Err(_) if playlist.is_some() => Response::MediaFormats {
+                title: playlist
+                    .as_ref()
+                    .map(|p| p.title.clone())
+                    .unwrap_or_default(),
+                duration: None,
+                thumbnail: None,
+                is_live: false,
+                choices: Vec::new(),
+                playlist,
             },
             Err(e) => Response::error(e.to_string()),
         }
+    }
+
+    /// "Whole playlist": each video becomes a download of its own, in a new queue
+    /// named after the playlist that downloads two at a time.
+    async fn download_playlist(&self, item: BrowserDownload) -> Result<Vec<i64>, String> {
+        let Some(pick) = item.media.clone() else {
+            return Err("not a playlist".into());
+        };
+        let mut req = to_new_download(item.clone(), false).request;
+        req.url = pick.page_url.clone();
+        let list = ldm_media::playlist(&self.media_tools, &req, Duration::from_secs(120))
+            .await
+            .map_err(|e| e.to_string())?;
+        if list.entries.is_empty() {
+            return Err("This playlist has no videos that can be downloaded.".into());
+        }
+        let queue = self.queues.as_ref().map(|q| q.create(&list.title, 2));
+        let mut ids = Vec::with_capacity(list.entries.len());
+        for entry in &list.entries {
+            let mut one = item.clone();
+            one.url = entry.url.clone();
+            one.file_name = None;
+            one.media = Some(MediaPick {
+                page_url: entry.url.clone(),
+                format: pick.format.clone(),
+                label: pick.label.clone(),
+                title: entry.title.clone(),
+                item: None,
+                playlist: false,
+            });
+            let mut new = to_new_download(one, queue.is_none());
+            new.queue_id = queue.as_ref().map(|q| q.id);
+            match self.engine.add(new).await {
+                Ok(id) => ids.push(id),
+                Err(e) => tracing::warn!("couldn't add {}: {e}", entry.url),
+            }
+        }
+        if let (Some(queues), Some(q)) = (&self.queues, &queue) {
+            let _ = queues.start_queue(q.id);
+        }
+        Ok(ids)
     }
 
     async fn download(
@@ -327,6 +431,23 @@ impl Service {
             .collect();
         if items.is_empty() {
             return Response::error("no links to download");
+        }
+        // A whole playlist: one download per video, in their own queue.
+        let (playlists, items): (Vec<_>, Vec<_>) = items
+            .into_iter()
+            .partition(|i| i.media.as_ref().is_some_and(|m| m.playlist));
+        if !playlists.is_empty() {
+            let mut ids = Vec::new();
+            for p in playlists {
+                match self.download_playlist(p).await {
+                    Ok(mut added) => ids.append(&mut added),
+                    Err(e) if items.is_empty() && ids.is_empty() => return Response::error(e),
+                    Err(e) => tracing::warn!("playlist: {e}"),
+                }
+            }
+            if items.is_empty() {
+                return Response::Accepted { ids };
+            }
         }
         // Fresh links for expired downloads continue those instead of adding new ones.
         let mut refreshed = Vec::new();

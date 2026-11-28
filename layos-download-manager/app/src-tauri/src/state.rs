@@ -192,9 +192,11 @@ impl AppState {
             app: app.clone(),
             ask: ask.clone(),
         });
-        let service = Service::new(engine.clone(), frontend).with_media_tools(tools.clone());
-
         let queues = Queues::start(engine.clone());
+        let service = Service::new(engine.clone(), frontend)
+            .with_media_tools(tools.clone())
+            .with_queues(queues.clone());
+
         let state = Arc::new(Self {
             engine,
             service,

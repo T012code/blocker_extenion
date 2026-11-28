@@ -50,7 +50,7 @@ api.runtime.onMessage.addListener((msg, sender, reply) => {
       return answer(
         native.getState().then((host) => {
           if (!host.installed) throw new Error('Install Layó\'s Download Manager to download videos from this site.');
-          return media.siteChoices({ pageUrl: msg.pageUrl, incognito: !!sender.tab?.incognito });
+          return media.siteChoices({ pageUrl: msg.pageUrl, playlistUrl: msg.playlistUrl, incognito: !!sender.tab?.incognito });
         }),
         reply,
       );

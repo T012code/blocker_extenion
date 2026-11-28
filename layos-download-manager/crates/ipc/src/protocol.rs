@@ -61,6 +61,22 @@ pub struct MediaPick {
     /// Which video of a post with several, counting from 1.
     #[serde(default)]
     pub item: Option<u32>,
+    /// `page_url` is a playlist: download every video in it, at `format`.
+    #[serde(default)]
+    pub playlist: bool,
+}
+
+/// A playlist the video button can download whole.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaylistSummary {
+    /// The playlist's own page.
+    pub url: String,
+    pub title: String,
+    /// How many videos can be downloaded.
+    pub count: usize,
+    /// The choices: (label, format, kind) for the whole list.
+    pub choices: Vec<MediaFormatChoice>,
 }
 
 /// One entry of the video button's menu.
@@ -104,7 +120,13 @@ pub enum Request {
     Resume { id: i64 },
     /// Which formats can be downloaded from this page or stream? `item.url` is the page
     /// (or playlist) address, with the browser's cookies.
-    MediaFormats { item: Box<BrowserDownload> },
+    #[serde(rename_all = "camelCase")]
+    MediaFormats {
+        item: Box<BrowserDownload>,
+        /// The playlist the page is playing (YouTube's `list=`), to offer it whole.
+        #[serde(default)]
+        playlist_url: Option<String>,
+    },
     /// An expired link: try it again, or else wait for the browser to send a fresh one
     /// for this download (from `pageUrl` in the answer).
     RefreshLink { id: i64 },
@@ -138,6 +160,9 @@ pub enum Response {
         thumbnail: Option<String>,
         is_live: bool,
         choices: Vec<MediaFormatChoice>,
+        /// The playlist the page is playing, when asked for and found.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        playlist: Option<PlaylistSummary>,
     },
     #[serde(rename_all = "camelCase")]
     Downloads {

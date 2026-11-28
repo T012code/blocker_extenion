@@ -105,9 +105,10 @@ export function localChoices(tabId, { src, duration }) {
 }
 
 /** Asks the app (yt-dlp) for the formats of the page. */
-export async function siteChoices({ pageUrl, incognito }) {
+export async function siteChoices({ pageUrl, playlistUrl, incognito }) {
   const item = await describe({ url: pageUrl, referrer: pageUrl, incognito });
-  const r = await native.send({ type: 'mediaFormats', item }, 120_000);
+  const r = await native.send({ type: 'mediaFormats', item, playlistUrl: playlistUrl || null }, 120_000);
+  const list = r.playlist;
   return {
     title: r.title,
     live: r.isLive,
@@ -117,6 +118,17 @@ export async function siteChoices({ pageUrl, incognito }) {
       kind: c.kind,
       action: { type: 'media', pageUrl, format: c.format, label: c.label, item: c.item ?? null },
     })),
+    // The playlist this video is playing in, to download whole (one download per video).
+    playlist: list ? {
+      title: list.title,
+      count: list.count,
+      choices: list.choices.map((c) => ({
+        label: c.label,
+        size: null,
+        kind: c.kind,
+        action: { type: 'media', pageUrl: list.url, format: c.format, label: c.label, playlist: true, playlistTitle: list.title },
+      })),
+    } : null,
   };
 }
 
@@ -133,7 +145,10 @@ export async function download({ action, title, pageUrl, incognito }) {
     });
   } else {
     item = await describe({ url: action.pageUrl, referrer: pageUrl, incognito, pageUrl, description: title });
-    item.media = { pageUrl: action.pageUrl, format: action.format ?? null, label: action.label ?? null, title: title || null, item: action.item ?? null };
+    item.media = {
+      pageUrl: action.pageUrl, format: action.format ?? null, label: action.label ?? null,
+      title: (action.playlist ? action.playlistTitle : title) || null, item: action.item ?? null, playlist: !!action.playlist,
+    };
   }
   const r = await native.send({ type: 'download', source: 'media', ask: false, items: [item] });
   await addHistory({ name: title || baseName(item.url), url: item.url, status: 'sent' });

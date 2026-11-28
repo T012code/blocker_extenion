@@ -11,6 +11,169 @@ mod runner;
 mod tools;
 
 pub use choices::{MediaChoice, MediaInfo, build_choices};
+
+/// A playlist's videos, listed without looking each one up (fast even for long lists).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Playlist {
+    pub title: String,
+    pub entries: Vec<PlaylistEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlaylistEntry {
+    /// The video's own page.
+    pub url: String,
+    pub title: Option<String>,
+    pub duration: Option<f64>,
+}
+
+/// The quality choices offered for a whole playlist: (label, yt-dlp format, is audio).
+pub const PLAYLIST_QUALITIES: &[(&str, &str, bool)] = &[
+    ("Best quality", "bv*+ba/b", false),
+    (
+        "1080p",
+        "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b",
+        false,
+    ),
+    ("720p", "bv*[height<=720]+ba/b[height<=720]/bv*+ba/b", false),
+    ("480p", "bv*[height<=480]+ba/b[height<=480]/bv*+ba/b", false),
+    ("Audio only", "ba/b", true),
+];
+
+/// The playlist's own page for a video page that plays one (YouTube's `list=`), or
+/// `None`. Auto-generated mixes (`RD…`) never end, so they don't count.
+pub fn playlist_url(page: &str) -> Option<String> {
+    let (_, query) = page.split_once('?')?;
+    let query = query.split('#').next().unwrap_or(query);
+    let host = page
+        .split("://")
+        .nth(1)?
+        .split(['/', '?'])
+        .next()?
+        .to_ascii_lowercase();
+    if !(host == "youtube.com" || host.ends_with(".youtube.com") || host == "youtu.be") {
+        return None;
+    }
+    let list = query.split('&').find_map(|kv| kv.strip_prefix("list="))?;
+    if list.is_empty()
+        || list.starts_with("RD")
+        || !list
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return None;
+    }
+    Some(format!("https://www.youtube.com/playlist?list={list}"))
+}
+
+/// Lists a playlist's videos (titles and pages, not their formats).
+pub async fn playlist(tools: &Tools, req: &RequestInfo, timeout: Duration) -> Result<Playlist> {
+    let mut cmd = tools::ytdlp_command(tools)?;
+    cmd.args([
+        "-J",
+        "--flat-playlist",
+        "--yes-playlist",
+        "--no-warnings",
+        "--no-colors",
+    ]);
+    cmd.arg("--").arg(&req.url);
+    let out = tokio::time::timeout(timeout, cmd.output())
+        .await
+        .map_err(|_| Error::Other("listing the playlist took too long".into()))??;
+    if !out.status.success() {
+        return Err(Error::Other(tools::last_error(&String::from_utf8_lossy(
+            &out.stderr,
+        ))));
+    }
+    let json: serde_json::Value = serde_json::from_slice(&out.stdout)?;
+    Ok(playlist_from(&json))
+}
+
+fn playlist_from(json: &serde_json::Value) -> Playlist {
+    let entries = json
+        .get("entries")
+        .and_then(|e| e.as_array())
+        .map(|list| {
+            list.iter()
+                .filter_map(|e| {
+                    let url = e
+                        .get("url")
+                        .or_else(|| e.get("webpage_url"))?
+                        .as_str()?
+                        .to_string();
+                    let title = e.get("title").and_then(|t| t.as_str()).map(str::to_string);
+                    // Private and deleted videos stay in lists, without a title.
+                    if matches!(
+                        title.as_deref(),
+                        Some("[Private video]" | "[Deleted video]")
+                    ) {
+                        return None;
+                    }
+                    Some(PlaylistEntry {
+                        url,
+                        title,
+                        duration: e.get("duration").and_then(|d| d.as_f64()),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Playlist {
+        title: json
+            .get("title")
+            .and_then(|t| t.as_str())
+            .unwrap_or("Playlist")
+            .to_string(),
+        entries,
+    }
+}
+
+#[cfg(test)]
+mod playlist_tests {
+    use super::*;
+
+    #[test]
+    fn finds_the_playlist_of_a_video_page() {
+        assert_eq!(
+            playlist_url(
+                "https://www.youtube.com/watch?v=jNQXAC9IVRw&list=PLBCF2DAC6FFB574DE&index=2"
+            )
+            .as_deref(),
+            Some("https://www.youtube.com/playlist?list=PLBCF2DAC6FFB574DE")
+        );
+        assert_eq!(
+            playlist_url("https://youtube.com/playlist?list=PLx-_9").as_deref(),
+            Some("https://www.youtube.com/playlist?list=PLx-_9")
+        );
+        assert_eq!(playlist_url("https://www.youtube.com/watch?v=x"), None);
+        assert_eq!(
+            playlist_url("https://www.youtube.com/watch?v=x&list=RDx"),
+            None,
+            "mixes never end"
+        );
+        assert_eq!(playlist_url("https://example.com/watch?list=PL1"), None);
+        assert_eq!(
+            playlist_url("https://www.youtube.com/watch?v=x&list=a%22b"),
+            None
+        );
+    }
+
+    #[test]
+    fn lists_entries_and_skips_private_ones() {
+        let p = playlist_from(
+            &serde_json::json!({"_type": "playlist", "title": "Stories", "entries": [
+                {"_type": "url", "url": "https://www.youtube.com/watch?v=a", "title": "A", "duration": 90.0},
+                {"_type": "url", "url": "https://www.youtube.com/watch?v=b", "title": "[Private video]"},
+                {"_type": "url", "url": "https://www.youtube.com/watch?v=c", "title": null}
+            ]}),
+        );
+        assert_eq!(p.title, "Stories");
+        assert_eq!(p.entries.len(), 2);
+        assert_eq!(p.entries[0].title.as_deref(), Some("A"));
+        assert_eq!(p.entries[1].url, "https://www.youtube.com/watch?v=c");
+    }
+}
+
 pub use runner::MediaRunner;
 pub use tools::Tools;
 
